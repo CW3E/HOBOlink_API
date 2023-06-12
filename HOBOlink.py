@@ -18,7 +18,7 @@ user_id = '26954' # user ID found on HOBOlink
 logger_id = '21667527' # SN from logger
 day = '2023-06-08' # previous day
 # HOBOlink url to get data from file endpoints
-hobolink_api_url = "https://webservice.hobolink.com/ws/data/file/JSON/user/26954?loggers=21667527&start_date_time=2023-06-08+00%3A00%3A00&end_date_time=2023-06-08+01%3A00%3A00"
+hobolink_api_url = "https://webservice.hobolink.com/ws/data/file/JSON/user/" + user_id + "?loggers=" + logger_id + "&start_date_time=" + day + "+00%3A00%3A00&end_date_time=" + day + "+01%3A00%3A00"
 
 # function to obtain a new OAuth 2.0 token from the authentication server
 def get_new_token():
