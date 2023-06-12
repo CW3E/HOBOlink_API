@@ -25,8 +25,8 @@ def get_new_token():
     # url provided by HOBOlink Web Services V3 Developer's Guide
     auth_server_url = "https://webservice.hobolink.com/ws/auth/token"
     # credentials provided by Onset Tech support
-    client_id = 'CW3E_WS'
-    client_secret = '4e76ee99629bc0708c68483fb1aeac3f9ee87713'
+    client_id = 'XXXXXX'
+    client_secret = 'XXXXXXXXXXXXXXXX'
 
     token_req_payload = {'grant_type': 'client_credentials'}
 
