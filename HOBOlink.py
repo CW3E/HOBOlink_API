@@ -9,7 +9,7 @@ import requests
 import json
 import logging
 import os
-import time
+import numpy as np
 from datetime import datetime, timedelta
 
 # record warnings during process
@@ -77,7 +77,7 @@ while True:
  
     # Convert dict to string
     data = json.dumps(data)
-    # will output the desired data specifed in the hobolink_api_url data ranges
+    # will output the desired data specifed in the hobolink_api_url date ranges
     with open(daily_file, "a") as file:
         file.write(data)
 
@@ -90,3 +90,93 @@ while True:
         print(type(data))
 
     break
+
+# Parse through data to save to a CSV file
+def listToString(s):
+ 
+    # initialize an empty string
+    str1 = ""
+ 
+    # traverse in the string
+    for ele in s:
+        str1 += ele
+ 
+    # return string
+    return str1
+
+s = listToString(data)
+
+substrings = []
+split_str = s.split("{")
+ 
+for u in split_str[1:]:
+    split_s = u.split("}")
+    if len(split_s) > 1:
+        substrings.append(split_s[0])
+ 
+substrings_str = ",".join(substrings)
+
+
+a_split = substrings_str.split('"logger_sn": ')
+a_split = "".join(a_split)
+
+b_split = a_split.split('"sensor_sn": ')
+b_split = "".join(b_split)
+
+c_split = b_split.split('"timestamp": ')
+c_split = "".join(c_split)
+
+d_split = c_split.split('"data_type_id": ')
+d_split = "".join(d_split)
+
+e_split = d_split.split('"si_value": ')
+e_split = "".join(e_split)
+
+f_split = e_split.split('"si_unit": ')
+f_split = "".join(f_split)
+
+g_split = f_split.split('"us_value": ')
+g_split = "".join(g_split)
+
+h_split = g_split.split('"us_unit": ')
+h_split = "".join(h_split)
+
+i_split = h_split.split('"scaled_value": ')
+i_split = "".join(i_split)
+
+j_split = i_split.split('"scaled_unit": ')
+j_split = "".join(j_split)
+
+k_split = j_split.split('"sensor_key": ')
+k_split = "".join(k_split)
+
+l_split = k_split.split('"sensor_measurement_type": ')
+l_split = "".join(l_split)
+lst = l_split.split(",")
+
+# Yield successive n-sized
+# chunks from l.
+def divide_chunks(l, n):
+      
+    # looping till length l
+    for i in range(0, len(l), n): 
+        yield l[i:i + n]
+  
+# How many elements each
+# list should have
+n = 12
+ 
+# data rows of csv file 
+rows = list(divide_chunks(lst, n))
+print(rows)
+print(len(rows))
+
+# Use numpy.savetxt() method to save the list as a CSV file
+fields="logger_sn, sensor_sn, timestamp, data_type_id, si_value, si_unit, us_value, us_unit, scaled_value, scaled_unit, sensor_key, sensor_measurement_type"
+csv_file = folder + site_id + previous_hour_datetime.strftime("_%Y-%m-%d") + ".csv"
+np.savetxt(csv_file, 
+           rows,
+           delimiter =", ",  # Set the delimiter as a comma followed by a space
+           header=fields,
+           fmt ='% s',
+           comments="")  # Set the format of the data as string
