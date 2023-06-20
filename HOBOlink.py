@@ -32,7 +32,7 @@ previous_hour_datetime = current_datetime - timedelta(hours=1)
 
 # format strings for url 
 start_time = previous_hour_datetime.strftime("&start_date_time=%Y-%m-%d+%H") + "%3A00%3A00" # start of the hour
-end_time = current_datetime.strftime("&end_date_time=%Y-%m-%d+%H") + "%3A59%3A59" # end of the hour
+end_time = previous_hour_datetime.strftime("&end_date_time=%Y-%m-%d+%H") + "%3A59%3A59" # end of the hour
 
 # HOBOlink url to get data from file endpoints
 hobolink_api_url = "https://webservice.hobolink.com/ws/data/file/JSON/user/" + user_id + "?loggers=" + logger_id + start_time + end_time
@@ -106,6 +106,7 @@ def listToString(s):
 
 s = listToString(data)
 
+# Parse string and store
 substrings = []
 split_str = s.split("{")
  
@@ -114,45 +115,76 @@ for u in split_str[1:]:
     if len(split_s) > 1:
         substrings.append(split_s[0])
  
-substrings_str = ",".join(substrings)
+substrings_str = "".join(substrings)
+
+print(substrings_str)
+print(type(substrings_str))
 
 
-a_split = substrings_str.split('"logger_sn": ')
+# water pressure
+a_split = substrings_str.split('"logger_sn": "21667527", "sensor_sn": "21638273-1", "timestamp": ')
 a_split = "".join(a_split)
 
-b_split = a_split.split('"sensor_sn": ')
+b_split = a_split.split('"data_type_id": "1", "si_value": ')
 b_split = "".join(b_split)
 
-c_split = b_split.split('"timestamp": ')
+c_split = b_split.split('"si_unit": "kPa", "us_value": ')
 c_split = "".join(c_split)
 
-d_split = c_split.split('"data_type_id": ')
+d_split = c_split.split('"us_unit": "psi", "scaled_value": 0.0, "scaled_unit": null, ')
 d_split = "".join(d_split)
 
-e_split = d_split.split('"si_value": ')
+e_split = d_split.split('"sensor_key": 1995867, "sensor_measurement_type": "Water Pressure"')
 e_split = "".join(e_split)
 
-f_split = e_split.split('"si_unit": ')
+# diff water pressure
+f_split = e_split.split('"logger_sn": "21667527", "sensor_sn": "21638273-2", "timestamp": ')
 f_split = "".join(f_split)
 
-g_split = f_split.split('"us_value": ')
+g_split = f_split.split('"sensor_key": 1995865, "sensor_measurement_type": "Diff Pressure"')
 g_split = "".join(g_split)
 
-h_split = g_split.split('"us_unit": ')
+# water temperature
+h_split = g_split.split('"logger_sn": "21667527", "sensor_sn": "21638273-3", "timestamp": ')
 h_split = "".join(h_split)
 
-i_split = h_split.split('"scaled_value": ')
+i_split = h_split.split('"si_unit": "\\u00b0C", "us_value": ')
 i_split = "".join(i_split)
 
-j_split = i_split.split('"scaled_unit": ')
+j_split = i_split.split('"us_unit": "\\u00b0F", "scaled_value": 0.0, "scaled_unit": null, "sensor_key": 1995866, "sensor_measurement_type": "Water Temperature"')
 j_split = "".join(j_split)
 
-k_split = j_split.split('"sensor_key": ')
+# water level
+k_split = j_split.split('"logger_sn": "21667527", "sensor_sn": "21638273-4", "timestamp": ')
 k_split = "".join(k_split)
 
-l_split = k_split.split('"sensor_measurement_type": ')
+l_split = k_split.split('"si_unit": "meters", "us_value": ')
 l_split = "".join(l_split)
-lst = l_split.split(",")
+
+m_split = l_split.split('"us_unit": "feet", "scaled_value": 0.0, "scaled_unit": null, "sensor_key": 1995863, "sensor_measurement_type": "Water Level"')
+m_split= "".join(m_split)
+
+# Baraometric Pressure
+n_split = m_split.split('"logger_sn": "21667527", "sensor_sn": "21667527-1", "timestamp": ')
+n_split= "".join(n_split)
+
+o_split = n_split.split('"sensor_key": 1962157, "sensor_measurement_type": "Barometric Pressure"')
+o_split= "".join(o_split)
+
+p_split = o_split.split('"logger_sn": "21667527", "sensor_sn": "21667527-S", "timestamp": ')
+p_split= "".join(p_split)
+
+q_split = p_split.split('"si_unit": "V", "us_value": ')
+q_split= "".join(q_split)
+
+r_split = q_split.split('"us_unit": "V", "scaled_value": 0.0, "scaled_unit": null, "sensor_key": 1962156, "sensor_measurement_type": "Battery"')
+r_split= "".join(r_split)
+
+# split empty spaces and uneeded characters
+lst = r_split.split(", ")
+#print(lst)
+#print(type(lst))
+#print(len(lst))
 
 # Yield successive n-sized
 # chunks from l.
@@ -164,18 +196,34 @@ def divide_chunks(l, n):
   
 # How many elements each
 # list should have
-n = 12
- 
+n = 18
+
 # data rows of csv file 
-rows = list(divide_chunks(lst, n))
-print(rows)
-print(len(rows))
+res = list(divide_chunks(lst, n))
+#print(res)
+
+# Remove empty List from List
+# using list comprehension
+rows = [ele for ele in res if ele != ['']]
+#print(rows)
+#print(len(rows))
+
+# convert list to array
+arr = np.array(rows)
+#print(arr)
+
+#create new matrix that removes duplicate columns
+data_arr,ind= np.unique(arr, axis=1, return_index=True)
+#print(data_arr)
+
+data_sort = data_arr[:,np.argsort(ind)]
+print(data_sort)
 
 # Use numpy.savetxt() method to save the list as a CSV file
-fields="logger_sn, sensor_sn, timestamp, data_type_id, si_value, si_unit, us_value, us_unit, scaled_value, scaled_unit, sensor_key, sensor_measurement_type"
-csv_file = folder + site_id + previous_hour_datetime.strftime("_%Y-%m-%d") + ".csv"
+fields="Timestamp, Water Pressure [kPa], Water Pressure [psi], Diff Pressure [kPa], Diff Pressure [psi], Water Temperature [Celsius], Water Temperature [Fahrenheit], Water Level [m], Water Level [ft], Barometric Pressure [kpa], Barometric Pressure [psi], Battery [V]"
+csv_file = site_id + previous_hour_datetime.strftime("_%Y-%m-%d") + ".csv"
 np.savetxt(csv_file, 
-           rows,
+           data_sort,
            delimiter =", ",  # Set the delimiter as a comma followed by a space
            header=fields,
            fmt ='% s',
