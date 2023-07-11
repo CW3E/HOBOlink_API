@@ -22,8 +22,14 @@ Technical Support will ask you to confirm the following:
 
 Once this is confirmed you will be asked to provide your HOBOlink account username and email address. Technical Support will then go and make your credentials to use the API, and send them over to you when complete.
 
-# HOBOlink_API.py
-The data will be pulled with the python script: HOBOlink_API.py.
+# HOBOlink.py
+The data will be pulled with the python script: HOBOlink.py.
 The script will require the info collected from HOBOlink and Onset technical support. 
 
-There are place holders for this info in the script. Edit the script and enter the 
+There are place holders for this info in the script. Edit the script and enter the correct information for the following variables:
+1. *user_id*
+2. *logger_id*
+3. *site_id*
+4. *client_id*
+5. *client_secret*
+
