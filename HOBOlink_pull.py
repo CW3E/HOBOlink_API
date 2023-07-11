@@ -5,52 +5,46 @@
 
 # import modules
 import requests
-import logging
-import os
-from datetime import datetime, timedelta, timezone
-from HOBOlink_parse import get_new_token, timestamp, parse_data
+from datetime import datetime
+from HOBOlink_parse import get_new_token, parse_data
 
 # Input your info for user ID, SN for logger, and client credentials
 # HOBOlink account and device info
-user_id = 'XXXXX' # user ID found on HOBOlink
-logger_id = 'XXXXXXXX' # SN from logger
-site_id = "XXX" #nickname given to device on HOBOlink
+user_id = input("Enter user ID found on HOBOlink:") # user ID found on HOBOlink
+logger_id = input("Enter SN from logger:") # SN from logger
+site_id = input("Enter site ID:") #nickname given to device on HOBOlink
 
 #HOBOlink authentication server
 # url provided by HOBOlink Web Services V3 Developer's Guide
 auth_server_url = "https://webservice.hobolink.com/ws/auth/token"
 
 # credentials provided by Onset Tech support
-client_id = 'XXXXXX'
-client_secret = 'XXXXXXXXXXXXXX'
-
-# create log file to capture warnings
-logging.basicConfig(filename=site_id + '.log', filemode='a', format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  datefmt='%Y-%m-%d %H:%M:%S%z')
-logging.captureWarnings(True)
+client_id = input("Enter client ID provoded by Onset:")
+client_secret = input("Enter client secret provided by Onset:")
 
 # file name
 daily_file_csv = site_id + ".csv"
 
-# check if file exists
-file_exists = os.path.isfile(daily_file_csv)
-if file_exists == True:
-    # file exists so grab last date timestamp
-    start_dt, start_min = timestamp(daily_file_csv) # last entry in file
-    previous_dt = datetime.now(timezone.utc) - timedelta(hours=1) # current time (previous hour)
-    # format strings for url 
-    start_time = start_dt.strftime("&start_date_time=%Y-%m-%d+%H") + "%3A" + start_min + "%3A01" # start of the hour
-    end_time = previous_dt.strftime("&end_date_time=%Y-%m-%d+%H") + "%3A59%3A59" # end of the hour
-    # Difference in time
-    time_diff = previous_dt.replace(microsecond=0, second=0, minute=55) - start_dt
-elif file_exists == False:
-    # file does not exist
-    start_dt = datetime.now(timezone.utc)
-    previous_dt = datetime.now(timezone.utc) - timedelta(hours=1) # current time (previous hour)
-    # format strings for url 
-    start_time = previous_dt.strftime("&start_date_time=%Y-%m-%d+%H") + "%3A00%3A00" # start of the hour
-    end_time = previous_dt.strftime("&end_date_time=%Y-%m-%d+%H") + "%3A59%3A59" # end of the hour
-    # Difference in time
-    time_diff = start_dt - previous_dt
+# provide date timestamp for desired data pull
+print("Enter date timestamp in the following format:")
+print("YYYY-mm-dd HH:MM:SS")
+start_dt = input("Enter start date timestamp (UTC):")
+end_dt = input("Enter end date timestamp (UTC):")
+
+date_format = '%Y-%m-%d %H:%M:%S'
+
+start_dt = datetime.strptime(start_dt, date_format)
+start_min =  start_dt.strftime("%M")
+start_sec = start_dt.strftime("%S")
+
+end_dt = datetime.strptime(end_dt, date_format)
+end_min =  end_dt.strftime("%M")
+end_sec = end_dt.strftime("%S")
+
+start_time = start_dt.strftime("&start_date_time=%Y-%m-%d+%H") + "%3A" + start_min + "%3A" + start_sec  # start of the hour
+end_time = end_dt.strftime("&end_date_time=%Y-%m-%d+%H") + "%3A" + end_min + "%3A" + end_sec # end of the hour
+# Difference in time
+time_diff = end_dt.replace(microsecond=0, second=0, minute=55) - start_dt
 
 # Difference in time (hours) for data being pulled
 hours = time_diff.total_seconds() / 3600
@@ -73,20 +67,22 @@ while True:
         token = get_new_token(auth_server_url, client_id, client_secret)
     else:
         # Convert data to dict
+        print("Successfully connected to HOBOlink!")
         data = api_call_response.json() # data from HOBOlink will be in JSON JavaScript Object Notation
 
     break
 
 # check size of data packet
 if len(data["observation_list"]) == t :
+    print("New data is available, and is complete.")
     parse_data(data, daily_file_csv) # pull and store data
 elif len(data["observation_list"]) == 0 :
-    logging.warning("No data new data since the last recorded timestamp.")
+    print("No data new data since the last recorded timestamp.")
 elif 0 < len(data["observation_list"]) < t :
-    logging.warning("There is new data, but may be incomplete.")
+    print("There is new data, but may be incomplete.")
     parse_data(data, daily_file_csv) # pull and store data
 elif len(data["observation_list"]) > t :
-    logging.warning("The data packet is greater than what is expected and duplicates may exist for some timestamps.")
+    print("The data packet is greater than what is expected and duplicates may exist for some timestamps.")
     parse_data(data, daily_file_csv) # pull and store data
     
 # End of script
