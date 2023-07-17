@@ -27,11 +27,11 @@ The data will be pulled with the python script: HOBOlink.py.
 The script will require the info collected from HOBOlink and Onset technical support. 
 
 There are place holders for this info in the script. Edit the script and enter the correct information for the following variables:
-1. *user_id*
-2. *logger_id*
-3. *site_id*
-4. *client_id*
-5. *client_secret*
+    1. *user_id* - line 15
+    2. *logger_id* - line 16
+    3. *site_id* - line 17
+    4. *client_id* - line 24
+    5. *client_secret* - line 25
 
 # CSV File Format:
 
