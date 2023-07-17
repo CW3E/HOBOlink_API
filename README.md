@@ -28,11 +28,11 @@ The script will require the info collected from HOBOlink and Onset technical sup
 
 There are place holders for this info in the script. Edit the script and enter the correct information for the following variables:
     
-    *user_id* - line 15
-    *logger_id* - line 16
-    *site_id* - line 17
-    *client_id* - line 24
-    *client_secret* - line 25
+    user_id - line 15
+    logger_id - line 16
+    site_id - line 17
+    client_id - line 24
+    client_secret - line 25
 
 # CSV File Format:
 
