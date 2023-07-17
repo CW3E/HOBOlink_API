@@ -35,9 +35,9 @@ There are place holders for this info in the script. Edit the script and enter t
 
 # CSV File Format:
 
-  Header: Timestamp [UTC], Water Pressure [kPa], Water Pressure [psi], Diff Pressure [kPa], Diff Pressure [psi], Water Temperature [Celsius], Water Temperature [Fahrenheit], Water Level [m], Water Level [ft], Barometric Pressure [kpa], Barometric Pressure [psi], Battery [V]
+    Header: Timestamp [UTC], Water Pressure [kPa], Water Pressure [psi], Diff Pressure [kPa], Diff Pressure [psi], Water Temperature [Celsius], Water Temperature [Fahrenheit], Water Level [m], Water Level [ft], Barometric Pressure [kpa], Barometric Pressure [psi], Battery [V]
  
-	Column  1: Timestamp [UTC]
+    Column  1: Timestamp [UTC]
 	Column  2: Water Pressure [kPa]
 	Column  3: Water Pressure [psi]
 	Column  4: Diff Pressure [kPa]
