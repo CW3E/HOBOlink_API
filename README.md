@@ -33,3 +33,19 @@ There are place holders for this info in the script. Edit the script and enter t
 4. *client_id*
 5. *client_secret*
 
+# CSV File Format:
+
+  Header: Timestamp [UTC], Water Pressure [kPa], Water Pressure [psi], Diff Pressure [kPa], Diff Pressure [psi], Water Temperature [Celsius], Water Temperature [Fahrenheit], Water Level [m], Water Level [ft], Barometric Pressure [kpa], Barometric Pressure [psi], Battery [V]
+ 
+	Column  1: Timestamp [UTC]
+	Column  2: Water Pressure [kPa]
+	Column  3: Water Pressure [psi]
+	Column  4: Diff Pressure [kPa]
+	Column  5: Diff Pressure [psi]
+	Column  6: Water Temperature [Celsius]
+	Column  7: Water Temperature [Fahrenheit]
+	Column  8: Water Level [m]
+	Column  9: Water Level [ft]
+	Column 10: Barometric Pressure [kpa]
+	Column 11: Barometric Pressure [psi]
+	Column 12: Battery [V]
