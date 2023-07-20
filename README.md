@@ -50,3 +50,5 @@ There are place holders for this info in the script. Edit the script and enter t
 	Column 10: Barometric Pressure [kpa]
 	Column 11: Barometric Pressure [psi]
 	Column 12: Battery [V]
+
+# Log File Format: 

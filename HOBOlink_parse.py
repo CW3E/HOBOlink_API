@@ -4,13 +4,9 @@
 # June 08, 2023
 
 # import modules
-import sys
-import requests
-import json
-import urllib3
-import pandas as pd
-import os
-from datetime import datetime
+import sys, requests, json, urllib3, pandas as pd, os
+from datetime import datetime, timedelta, timezone
+from collections import namedtuple
 
 # disable warnings for Insecure Request Warning
 urllib3.disable_warnings() # warnings occur when obtaining a token
@@ -35,18 +31,31 @@ def get_new_token(auth_server_url, client_id, client_secret):
     tokens = json.loads(token_response.text)
     return tokens['access_token']
 
-def timestamp(filename):
+# function to grab last recorded timestamp and convert to JSON format
+# timestamp will be used to pull new data since that timestamp
+def csv_timestamp(filename):
     #check timestamp of last entry of the csv file
-    df_file = pd.read_csv(filename)
-    df = df_file.iloc[-1:,0].values
-
+    df_file = pd.read_csv(filename) # read csv
+    df = df_file.iloc[-1:,0].values # last recorded timestamp
     date_str = df[0]
-    date_format = '%Y-%m-%d %H:%M:%S%z'
+    date_format = '%Y-%m-%d %H:%M:%S%z' # date timestamp format
+    # create datetime object and 5 minutes to last recorded timestamp
+    # 5 minutes are added to pull data from the next available timestamp
+    date_obj = datetime.strptime(date_str, date_format) + timedelta(minutes=5) # add 5 minutes
+    # format string to be used in url
+    start_timestamp = date_obj.strftime("&start_date_time=%Y-%m-%d+%H") + "%3A" + date_obj.strftime("%M") + "%3A" + date_obj.strftime("%S")
+    return start_timestamp, date_obj
 
-    date_obj = datetime.strptime(date_str, date_format)
-    start_min =  date_obj.strftime("%M")
-        
-    return date_obj, start_min
+# function to create timestamp (in UTC)
+def current_timestamp():
+    current_dt = datetime.now(timezone.utc).replace(microsecond=0, second=0, minute=55) - timedelta(hours=1) # previous hours timestamp
+    # format string to be used in url
+    end_time = current_dt.strftime("&end_date_time=%Y-%m-%d+%H") + "%3A" + current_dt.strftime("%M")+ "%3A" + current_dt.strftime("%S") # end of the hour
+    return end_time, current_dt
+
+def check_error(hobolink_data):
+    
+    return
 
 # function to parse the data from the HOBOlink API
 def parse_data(hobolink_data, filename):
@@ -97,5 +106,10 @@ def parse_data(hobolink_data, filename):
         header = False
     elif file_exists == False:
         header = True
-    df2.to_csv(filename, index=False, mode='a', header=header)
-    return
+    df2.to_csv(filename, index=False, mode='a', header=header) # save dateframe to csv file
+    
+    start_t = datetime.strptime(df2.iloc[0,0], '%Y-%m-%d %H:%M:%S%z') # check start date timestamp
+    end_t = datetime.strptime(df2.iloc[-1,0], '%Y-%m-%d %H:%M:%S%z') # check end date timestamp
+    parse_df = namedtuple("parsed_df", ["Dataframe", "Start_Timestamp", "End_Timestamp"]) # create tuple to call values from functions
+    return parse_df(Dataframe=df2.shape[0],Start_Timestamp=start_t, End_Timestamp=end_t)
+
