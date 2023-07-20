@@ -10,12 +10,17 @@ from HOBOlink_parse import get_new_token, csv_timestamp, current_timestamp, pars
 
 # Input your info for user ID, SN for logger, and client credentials
 # HOBOlink account and device info
+user_id = 'XXXXX' # user ID found on HOBOlink
+logger_id = 'XXXXXXXX' # SN from logger
+site_id = "XXX" #nickname given to device on HOBOlink
 
 #HOBOlink authentication server
 # url provided by HOBOlink Web Services V3 Developer's Guide
 auth_server_url = "https://webservice.hobolink.com/ws/auth/token"
 
 # credentials provided by Onset Tech support
+client_id = 'XXXXX'
+client_secret = 'XXXXXXXXXXXXXXX'
 
 # create log file to capture warnings
 logging.basicConfig(filename=site_id + '.log', filemode='a', format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  datefmt='%Y-%m-%d %H:%M:%S%z')
