@@ -22,17 +22,37 @@ Technical Support will ask you to confirm the following:
 
 Once this is confirmed you will be asked to provide your HOBOlink account username and email address. Technical Support will then go and make your credentials to use the API, and send them over to you when complete.
 
-# HOBOlink.py
-The data will be pulled with the python script: HOBOlink.py.
-The script will require the info collected from HOBOlink and Onset technical support. 
+# Clone repository and Get Started
+Go ahead and clone the HOBOlink_API repository with git, GitHub desktop, or download ZIP file.
+`Note: Scripts will need to be made executeable if repo was cloned into Skyriver.`
 
-There are place holders for this info in the script. Edit the script and enter the correct information for the following variables:
-    
-    user_id - line 15
-    logger_id - line 16
-    site_id - line 17
-    client_id - line 24
-    client_secret - line 25
+## Skyriver walkthrough
+1. SSH into Skyriver with login credentials
+2. Clone repo
+	$ git clone https://github.com/CW3E/HOBOlink_API
+3. Make files executable(`HOBOlink.py`,`HOBOlink_parse.py`,`email_fcns.py`)
+
+## Create .env file to store environement variables
+Create a new `.env` file in the root directory where `HOBOlink.py` is located.
+Add the following lines into the `.env` file and input your user ID, the loggers SN, the site ID (used for naming log files, CSV, etc.), and credentials.
+
+	# Input your info for user ID, SN for logger, and client credentials
+	HOBOlink account and device info
+	USER_ID='XXXXX'
+	LOGGER_ID='XXXXXXXX' 
+	STREAM_SITE_ID='XXX'
+
+	# credentials provided by Onset Tech support
+	CLIENT_ID='XXXXXX'
+	CLIENT_SECRET='XXXXXXXXXXXXXXX'
+
+
+The variables stored in the `.env` can now be called on with the `dotenv` and `os` python module within the `HOBOlink.py` script. `.gitignore` has been set up to avoid any potential risk of accidentally pushing it to git repo. All of your sensitive information is now safely stored.
+
+# HOBOlink.py and HOBOlink_parse.py
+`HOBOlink.py` will be the main script, and uses a number of functions from `HOBOlink_parse.py`
+The following will breakdown each of the scripts further:
+
 
 # CSV File Format:
 
@@ -51,4 +71,24 @@ There are place holders for this info in the script. Edit the script and enter t
 	Column 11: Barometric Pressure [psi]
 	Column 12: Battery [V]
 
-# Log File Format: 
+# Log File:
+`HOBOlink.py` will create a log file and record important events.
+The default name of this file is `streams.log` and will account for all the sites listed in the `.env` file.
+
+# Notification system
+There is an option to be able to recieve notifications via a Gmail account. The notfication option will send an email with the information when important events occured (same information is recorded in the `streams.log` file). 
+
+## Gmail API for notifications
+
+1. Create or login into Gmail account that you plan to use. Emails will be sent from this account.
+2. [Create a Google Cloud project](https://console.cloud.google.com/projectcreate)
+3. Add info for the email that will send alerts and emails that are on the email list to the `.env`
+## Add email info to recieve alerts
+	# Email info to recieve alerts
+	EMAIL='XXXXX'
+	EMAIL_LIST='XXXXXX,XXXXXX,XXXXX'
+
+# Run script and helpful notes
+The script is setup to run and create csv files for all the loggers listed in the `.env` file. Once all info has been inputted the script is ready to run. The script will pull data from a default start time (on the initial run) and will pull any new available data for that logger since that default time. After the first time the script is ran for a site, it will then grab the start time from the last timestamp recorded in the csv file for each site.
+
+There are limitattions to pulling data for large time periods since the API is only capable of proving up to 100,000 data points at any given time. This will require the script to be ran multiple times until all available data is recorded into its csv file. Pulling large amounts of data points at any given time is not advised with the API, and can result in missing values. 
