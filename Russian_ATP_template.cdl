@@ -1,0 +1,107 @@
+netcdf CW3E_Meteorological_Observations {
+
+    // Define Station Metadata
+    dimensions:
+        lat = 1 ;
+        lon = 1 ;
+        elev = 1 ;
+    
+    variables:
+        char station_info ;
+            station_info: long_name = "Station Long Name" ;
+            station_info: station_type = "PrecipMet" ;
+            station_info: watershed_name = "Russian" ;
+            station_info: cw3e_id = "CW3E ID" ;
+            station_info: cdec_id = "CDEC ID" ;
+            station_info: mesowest_id = "Mesowest ID" ;
+            station_info: noaa_psl_id = "NOAA PSL ID" ;
+            station_info: nws_location_id = "NWS Location ID" ;
+            station_info: comment = "any other kind of station info" ;
+        float lat(lat) ;
+            lat:long_name = "Latitude" ;
+            lat:standard_name = "latitude" ;
+            lat:units = "degrees_north" ;
+            lat:axis = "Y" ;
+            lat:comment = "" ;
+        float lon(lon) ;
+            lon:long_name = "Longitude" ;
+            lon:standard_name = "longitude" ;
+            lon:units = "degrees_east" ;
+            lon:axis = "X" ;
+            lon:comment = "" ;
+        float elev(elev) ;
+            elev:long_name = "Elevation" ;
+            elev:standard_name = "surface_altitude" ;
+            elev:units = "m";
+            elev:axis = "Z" ;
+            elev:positive = "up" ;
+            elev:comment = "" ;
+
+    // Define Group for the 2 Minute Data
+    group: two_min_precip {
+        dimensions:
+            time = UNLIMITED ;
+        
+        variables:
+            double time(time) ;
+                time:long_name = "Time" ;
+                time:standard_name = "time" ;
+                time:units = "seconds since 1970-01-01 00:00:00 0:00" ;
+                time:axis = "T" ;
+                time:comment = "" ;
+
+            float rain(time) ;
+                rain:long_name = "Accumulated Rain" ;
+                rain:standard_name = "thickness_of_rainfall_amount" ;
+                rain:units = "mm" ;
+                rain:_FillValue = -7999.0f ;
+                rain:valid_min = 0.0f ;
+                rain:valid_max = 100.0f ;
+                rain:coordinates = "time lat lon surface_elevation" ;
+                rain:source = "physical measurement" ;
+                rain:cell_methods = "time: two-minute total lat: point lon: point surface_elevation: point" ;
+                rain:instrument = "tipping bucket" ;
+                rain:comment = "" ;
+
+            float rain_accumulated(time) ;
+                rain_accumulated:long_name = "Accumulated Rain Since start of the Water Year" ;
+                rain_accumulated:standard_name = "thickness_of_rainfall_amount" ;
+                rain_accumulated:units = "mm" ;
+                rain_accumulated:_FillValue = -7999.0f ;
+                rain_accumulated:valid_min = 0.0f ;
+                rain_accumulated:valid_max = 100.0f ;
+                rain_accumulated:coordinates = "time lat lon surface_elevation" ;
+                rain_accumulated:source = "physical measurement" ;
+                rain_accumulated:cell_methods = "time: two-minute total lat: point lon: point surface_elevation: point" ;
+                rain_accumulated:instrument = "tipping bucket" ;
+                rain_accumulated:comment = "" ;
+                
+    } // End Group
+
+    // Define Global Attributes:
+    :featureType = "timeSeries" ;
+    
+    :title = "One Day of Data from CW3E Hydrometeorology Station" ;
+    :summary = "Contains observations of various surface hydrometeorological properties. The data in thise file spans one day." ;
+    :institution = "Center for Western Weather and Water Extremes (CW3E), Scripps Insitution of Oceanography at the University of California San Diego" ;
+    :time_coverage_start = "" ;
+    :time_coverage_end = "" ;
+    :time_coverage_duration = "" ;
+    :time_coverage_resolution = "" ;
+    :date_created = "" ;
+    :history  = "" ;
+    :source = "physical measurement" ;
+    :processing_level = "L1 - Unprocessed raw data. The data in this file are raw data from the station and have not undergone any quality control. The data are provided “as is” and are intended for research purposes only. See `https://cw3e.ucsd.edu/disclaimer/` for more details" ;
+    
+    :creator_name = "CW3E Fieldwork Data Processing Pipeline" ;
+    :creator_email = "cw3e-fieldwork-g@ucsd.edu" ;
+    :creator_website = "cw3e.ucsd.edu" ;
+    
+    :cw3e_cdl_template_version = "1.0" ;
+    :cw3e_template_script = "" ;
+    :cw3e_processing_script = "" ;
+    :Conventions = "CF-1.8, ACDD-1.3" ;
+    :standard_name_vocabulary = "CF Standard Name Table v84" ;
+    :comment = "" ;
+    
+}

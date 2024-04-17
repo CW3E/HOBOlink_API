@@ -1,0 +1,52 @@
+--- # Start File
+## NetCDF Conversion Config File
+# This is a configuration file for converting a station's csv files to netCDF format. It contains metadata about the station and also the metadata that the program needs to read and process the csv files.
+# Use caution when editing this file. Changing certain features of this file (e.g. key names, variable names, indenting) will cause the code execution to fail. If you aren't sure what to edit, ask Jacob first.
+
+# Configuration for Station
+Site Configuration:
+  Lat: 39.338966
+  Lon: -123.16977
+  Elev: 411
+  netCDF attributes:
+    long_name: Antler Point
+    station_type: PrecipMet
+    installation_date: '2017-11-08'
+    watershed_name: Russian
+    CW3E_ID: ATP
+    CDEC_ID: ''
+    Mesowest_ID: ''
+    NOAA_PSL_ID: ''
+    NWS_Location_ID: ''
+
+# Configuration for each datafile associated with the station
+Datafile Configuration:
+  - # Data File 1
+    File Name: 'ATP_MasterTable.csv'
+    Group Name: 'two_min_precip_met'
+    First Data Line: 2
+    First Datetime Col: 2
+    Number of Datetime Cols: 2
+    Datetime Col Formats: ['%Y-%m-%d %H:%M:%S%z']
+    Datetime Col String Lengths: [20]
+    Variable Configuration:
+      - # Precipitation
+        variable name: precipitation
+        first column: 2
+        last column: 2
+        netCDF attributes:
+          units: mm
+          missing_value: -7999.0
+          valid_min: 0.0
+          valid_max: 100.0
+  
+      - # Accumulated Precipitation - resets to 0 at the start of the water year: 10/01 00:00:00
+        variable name: accumulated_precipitation
+        first column: 3
+        last column: 3
+        netCDF attributes:
+          units: mm
+          missing_value: -7999.0
+          valid_min: 0.0
+          valid_max: 27000.0
+... # End File

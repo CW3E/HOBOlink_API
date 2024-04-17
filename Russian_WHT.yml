@@ -1,0 +1,182 @@
+--- # Start File
+## NetCDF Conversion Config File
+# This is a configuration file for converting a station's csv files to netCDF format. It contains metadata about the station and also the metadata that the program needs to read and process the csv files.
+# Use caution when editing this file. Changing certain features of this file (e.g. key names, variable names, indenting) will cause the code execution to fail. If you aren't sure what to edit, ask Jacob first.
+
+# Configuration for Station
+Site Configuration:
+  Lat: 39.338966
+  Lon: -123.16977
+  Elev: 275
+  netCDF attributes:
+    long_name: White Creek
+    station_type: Stream Gauge
+    installation_date: '2017-08-27'
+    watershed_name: Russian
+    CW3E_ID: WHT
+    CDEC_ID: WIC
+    Mesowest_ID: ''
+    NOAA_PSL_ID: ''
+    NWS_Location_ID: ''
+
+# Configuration for each datafile associated with the station
+Datafile Configuration:
+  - # Data File 1
+    File Name: 'WHT_MasterTable.csv'
+    Group Name: '15_min_streamgauge'
+    First Data Line: 2
+    First Datetime Col: 2
+    Number of Datetime Cols: 2
+    Datetime Col Formats: ['%Y-%m-%d %H:%M:%S%z']
+    Datetime Col String Lengths: [20]
+    Variable Configuration:
+      - # Water Temperature [Celsius]
+        variable name: water_temperature_C
+        first column: 2
+        last column: 2
+        netCDF attributes:
+          units: Celsius
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+  
+      - # Water Level (stage) [meters]
+        variable name: water_level_m
+        first column: 3
+        last column: 3
+        netCDF attributes:
+          units: m
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+
+      - # Water Pressure [kPa]
+        variable name: water_pressure_kPa
+        first column: 4
+        last column: 4
+        netCDF attributes:
+          units: kPa
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+
+      - # Water Pressure [psi]
+        variable name: water_pressure_psi
+        first column: 5
+        last column: 5
+        netCDF attributes:
+          units: psi
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+
+      - # Difference Pressure [kPa]
+        variable name: diff_pressure_kPa
+        first column: 6
+        last column: 6
+        netCDF attributes:
+          units: kPa
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+  
+      - # Difference Pressure [psi]
+        variable name: diff_pressure_psi
+        first column: 7
+        last column: 7
+        netCDF attributes:
+          units: psi
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+
+      - # Water Temperature [Fahrenheit]
+        variable name: water_temperature_F
+        first column: 8
+        last column: 8
+        netCDF attributes:
+          units: Fahrenheit
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+
+      - # Water Level [feet]
+        variable name: water_level_ft
+        first column: 9
+        last column: 9
+        netCDF attributes:
+          units: ft
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+
+      - # Barometric Pressure [kPa]
+        variable name: barometric_pressure_kPa
+        first column: 10
+        last column: 10
+        netCDF attributes:
+          units: kPa
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+
+      - # Barometric Pressure [psi]
+        variable name: barometric_pressure
+        first column: 11
+        last column: 11
+        netCDF attributes:
+          units: psi
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+  
+      - # Level Corrected [feet]
+        variable name: level_corrected_ft
+        first column: 12
+        last column: 12
+        netCDF attributes:
+          units: ft
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+  
+      - # Level Corrected [meters]
+        variable name: level_corrected_m
+        first column: 13
+        last column: 13
+        netCDF attributes:
+          units: m
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+  
+      - # Level Corrected [centimeters]
+        variable name: level_corrected_cm
+        first column: 14
+        last column: 14
+        netCDF attributes:
+          units: cm
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+  
+      - # Discharge [cubic feet per second]
+        variable name: discharge_cfs
+        first column: 15
+        last column: 15
+        netCDF attributes:
+          units: cfs
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+  
+      - # Discharge [cubic meters per second]
+        variable name: discharge_cms
+        first column: 16
+        last column: 16
+        netCDF attributes:
+          units: cms
+          missing_value: -7999.0
+          valid_min: -9999.99
+          valid_max: 9999.99
+... # End File

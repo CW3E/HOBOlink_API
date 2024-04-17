@@ -1,0 +1,275 @@
+netcdf CW3E_Meteorological_Observations {
+
+    // Define Station Metadata
+    dimensions:
+        lat = 1 ;
+        lon = 1 ;
+        elev = 1 ;
+    
+    variables:
+        char station_info ;
+            station_info: long_name = "Station Long Name" ;
+            station_info: station_type = "Stream Gauge" ;
+            station_info: watershed_name = "Russian" ;
+            station_info: cw3e_id = "CW3E ID" ;
+            station_info: cdec_id = "CDEC ID" ;
+            station_info: mesowest_id = "Mesowest ID" ;
+            station_info: noaa_psl_id = "NOAA PSL ID" ;
+            station_info: nws_location_id = "NWS Location ID" ;
+            station_info: comment = "any other kind of station info" ;
+        float lat(lat) ;
+            lat:long_name = "Latitude" ;
+            lat:standard_name = "latitude" ;
+            lat:units = "degrees_north" ;
+            lat:axis = "Y" ;
+            lat:comment = "" ;
+        float lon(lon) ;
+            lon:long_name = "Longitude" ;
+            lon:standard_name = "longitude" ;
+            lon:units = "degrees_east" ;
+            lon:axis = "X" ;
+            lon:comment = "" ;
+        float elev(elev) ;
+            elev:long_name = "Elevation" ;
+            elev:standard_name = "surface_altitude" ;
+            elev:units = "m";
+            elev:axis = "Z" ;
+            elev:positive = "up" ;
+            elev:comment = "" ;
+
+    // Define Group for the 15 Minute Data
+    group: fifteen_min_streamgauge {
+        dimensions:
+            time = UNLIMITED ;
+        
+        variables:
+            double time(time) ;
+                time:long_name = "Time" ;
+                time:standard_name = "time" ;
+                time:units = "seconds since 1970-01-01 00:00:00 0:00" ;
+                time:axis = "T" ;
+                time:comment = "" ;
+
+            float water_temperature_C(time) ; 
+                water_temperature_C:long_name = "Water Temperature" ;
+                water_temperature_C:standard_name = "water_temperature_C" ;
+                water_temperature_C:units = "degree Celsius" ;
+                water_temperature_C:_FillValue = -7999.0f ;
+                water_temperature_C:valid_min = -273.15f ;
+                water_temperature_C:valid_max = 100.0f ;
+                water_temperature_C:coordinates = "time lat lon surface_elevation" ;
+                water_temperature_C:source = "physical measurement" ;
+                water_temperature_C:cell_methods = "time: fifteen_minute mean lat: point lon: point surface_elevation: point" ;
+                water_temperature_C:instrument = "water_level_sensor" ;
+                water_temperature_C:comment = "" ;
+
+            float water_level_m(time) ;
+                water_level_m:long_name = "Water Level" ;
+                water_level_m:standard_name = "water_level_m" ;
+                water_level_m:units = "meters" ;
+                water_level_m:_FillValue = -7999.0f ;
+                water_level_m:valid_min = -273.15f ;
+                water_level_m:valid_max = 100.0f ;
+                water_level_m:coordinates = "time lat lon surface_elevation" ;
+                water_level_m:source = "physical measurement" ;
+                water_level_m:cell_methods = "time: fifteen_minute mean lat: point lon: point surface_elevation: point" ;
+                water_level_m:instrument = "water_level_sensor" ;
+                water_level_m:comment = "" ;
+            
+            float water_pressure_kPa(time) ;
+                water_pressure_kPa:long_name = "Water Pressure" ;
+                water_pressure_kPa:standard_name = "water_pressure_kPa" ;
+                water_pressure_kPa:units = "kPa" ;
+                water_pressure_kPa:_FillValue = -7999.0f ;
+                water_pressure_kPa:valid_min = 0.0f ;
+                water_pressure_kPa:valid_max = 100.0f ;
+                water_pressure_kPa:coordinates = "time lat lon surface_elevation" ;
+                water_pressure_kPa:source = "physical measurement" ;
+                water_pressure_kPa:cell_methods = "time: fifteen_minute mean lat: point lon: point surface_elevation: point" ;
+                water_pressure_kPa:instrument = "water_level_sensor" ;
+                water_pressure_kPa:comment = "" ;
+            
+            float water_pressure_psi(time) ;
+                water_pressure_psi:long_name = "Water Pressure" ;
+                water_pressure_psi:standard_name = "water_pressure_psi" ;
+                water_pressure_psi:units = "psi" ;
+                water_pressure_psi:_FillValue = -7999.0f ;
+                water_pressure_psi:valid_min = 0.0f ;
+                water_pressure_psi:valid_max = 2000.0f ;
+                water_pressure_psi:coordinates = "time lat lon surface_elevation" ;
+                water_pressure_psi:source = "physical measurement" ;
+                water_pressure_psi:cell_methods = "time: fifteen_minute mean lat: point lon: point surface_elevation: point" ;
+                water_pressure_psi:instrument = "water_level_sensor";
+                water_pressure_psi:comment = "" ;
+            
+            float diff_pressure_kPa(time) ;
+                diff_pressure_kPa:long_name = "Difference Pressure" ;
+                diff_pressure_kPa:standard_name = "diff_pressure_kPa" ;
+                diff_pressure_kPa:units = "kPa" ;
+                diff_pressure_kPa:_FillValue = -7999.0f ;
+                diff_pressure_kPa:valid_min = 0.0f ;
+                diff_pressure_kPa:valid_max = 2000.0f ;
+                diff_pressure_kPa:coordinates = "time lat lon surface_elevation" ;
+                diff_pressure_kPa:cell_methods = "time: fifteen_minute mean lat: point lon: point surface_elevation: point" ;
+                diff_pressure_kPa:instrument = "water_level_sensor" ;
+                diff_pressure_kPa:comment = "" ;
+            
+            float diff_pressure_psi(time) ;
+                diff_pressure_psi:long_name = "Difference Pressure" ;
+                diff_pressure_psi:standard_name = "diff_pressure_psi" ;
+                diff_pressure_psi:units = "psi" ;
+                diff_pressure_psi:_FillValue = -7999.0f ;
+                diff_pressure_psi:valid_min = 0.0f ;
+                diff_pressure_psi:valid_max = 100.0f ;
+                diff_pressure_psi:coordinates = "time lat lon surface_elevation" ;
+                diff_pressure_psi:source = "physical measurement" ;
+                diff_pressure_psi:cell_methods = "time: fifteen_minute mean lat: point lon: point surface_elevation: point" ;
+                diff_pressure_psi:instrument = "water_level_sensor" ;
+                diff_pressure_psi:comment = "" ;
+            
+            float water_temperature_F(time) ;
+                water_temperature_F:long_name = "Water Temperature" ;
+                water_temperature_F:standard_name = "water_temperature_F" ;
+                water_temperature_F:units = "degree Fahrenheit" ;
+                water_temperature_F:_FillValue = -7999.0f ;
+                water_temperature_F:valid_min = 0.0f ;
+                water_temperature_F:valid_max = 100.0f ;
+                water_temperature_F:coordinates = "time lat lon surface_elevation" ;
+                water_temperature_F:source = "physical measurement" ;
+                water_temperature_F:cell_methods = "time: fifteen_minute maximum lat: point lon: point surface_elevation: point" ;
+                water_temperature_F:instrument = "water_level_sensor";
+                water_temperature_F:comment = "" ;
+            
+            float water_level_ft(time) ;
+                water_level_ft:long_name = "Water Level" ;
+                water_level_ft:standard_name = "water_level_ft" ;
+                water_level_ft:units = "ft" ;
+                water_level_ft:_FillValue = -7999.0f ;
+                water_level_ft:valid_min = 0.0f ;
+                water_level_ft:valid_max = 360.0f ;
+                water_level_ft:coordinates = "time lat lon surface_elevation" ;
+                water_level_ft:source = "physical measurement" ;
+                water_level_ft:cell_methods = "time: fifteen_minute mean lat: point lon: point surface_elevation: point" ;
+                water_level_ft:instrument = "water_level_sensor" ;
+                water_level_ft:comment = "" ;
+            
+            float barometric_pressure_kPa(time) ;
+                barometric_pressure_kPa:long_name = "Barometric Pressure" ;
+                barometric_pressure_kPa:standard_name = "barometric_pressure_kPa" ;
+                barometric_pressure_kPa:units = "kPa" ;
+                barometric_pressure_kPa:_FillValue = -7999.0f ;
+                barometric_pressure_kPa:valid_min = 0.0f ;
+                barometric_pressure_kPa:valid_max = 100.0f ;
+                barometric_pressure_kPa:coordinates = "time lat lon surface_elevation" ;
+                barometric_pressure_kPa:source = "physical measurement" ;
+                barometric_pressure_kPa:cell_methods = "time: fifteen_minute total lat: point lon: point surface_elevation: point" ;
+                barometric_pressure_kPa:instrument = "water_level_sensor" ;
+                barometric_pressure_kPa:comment = "" ;
+
+            float barometric_pressure_psi(time) ;
+                barometric_pressure_psi:long_name = "Barometric Pressure" ;
+                barometric_pressure_psi:standard_name = "barometric_pressure_psi" ;
+                barometric_pressure_psi:units = "psi" ;
+                barometric_pressure_psi:_FillValue = -7999.0f ;
+                barometric_pressure_psi:valid_min = -273.15f ;
+                barometric_pressure_psi:valid_max = 100.0f;
+                barometric_pressure_psi:coordinates = "time depth lat lon surface_elevation" ;
+                barometric_pressure_psi:source = "physical measurement" ;
+                barometric_pressure_psi:cell_methods = "time: fifteen_minute mean depth: point lat: point lon: point surface_elevation: point" ;
+                barometric_pressure_psi:instrument = "water_level_sensor" ;
+                barometric_pressure_psi:comment = "" ;
+
+            float level_corrected_ft(time) ;
+                level_corrected_ft:long_name = "Level Corrected" ;
+                level_corrected_ft:standard_name = "level_corrected_ft" ;
+                level_corrected_ft:units = "ft" ;
+                level_corrected_ft:_FillValue = -7999.0f ;
+                level_corrected_ft:valid_min = 0.0f ;
+                level_corrected_ft:valid_max = 1.0f;
+                level_corrected_ft:coordinates = "time depth lat lon surface_elevation" ;
+                level_corrected_ft:source = "physical measurement" ;
+                level_corrected_ft:cell_methods = "time: fifteen_minute mean depth: point lat: point lon: point surface_elevation: point" ;
+                level_corrected_ft:instrument = "water_level_sensor" ;
+                level_corrected_ft:comment = "" ;
+            
+            float level_corrected_m(time) ;
+                level_corrected_m:long_name = "Level Corrected" ;
+                level_corrected_m:standard_name = "level_corrected_m" ;
+                level_corrected_m:units = "m" ;
+                level_corrected_m:_FillValue = -7999.0f ;
+                level_corrected_m:valid_min = 0.0f ;
+                level_corrected_m:valid_max = 15.0f ;
+                level_corrected_m:coordinates = "time lat lon surface_elevation" ;
+                level_corrected_m:source = "physical measurement" ;
+                level_corrected_m:cell_methods = "time: fifteen_minute mean lat: point lon: point surface_elevation: point" ;
+                level_corrected_m:instrument = "water_level_sensor" ;
+                level_corrected_m:comment = "" ;
+                
+            float level_corrected_cm(time) ;
+                level_corrected_cm:long_name = "Level Corrected" ;
+                level_corrected_cm:standard_name = "level_corrected_cm" ;
+                level_corrected_cm:units = "cm" ;
+                level_corrected_cm:_FillValue = -7999.0f ;
+                level_corrected_cm:valid_min = 0.0f ;
+                level_corrected_cm:valid_max = 15.0f ;
+                level_corrected_cm:coordinates = "time lat lon surface_elevation" ;
+                level_corrected_cm:source = "physical measurement" ;
+                level_corrected_cm:cell_methods = "time: fifteen_minute mean lat: point lon: point surface_elevation: point" ;
+                level_corrected_cm:instrument = "water_level_sensor" ;
+                level_corrected_cm:comment = "" ;
+                
+            float discharge_cfs(time) ;
+                discharge_cfs:long_name = "Discharge" ;
+                discharge_cfs:standard_name = "discharge_cfs" ;
+                discharge_cfs:units = "cfs" ;
+                discharge_cfs:_FillValue = -7999.0f ;
+                discharge_cfs:valid_min = 0.0f ;
+                discharge_cfs:valid_max = 15.0f ;
+                discharge_cfs:coordinates = "time lat lon surface_elevation" ;
+                discharge_cfs:source = "physical measurement" ;
+                discharge_cfs:cell_methods = "time: fifteen_minute mean lat: point lon: point surface_elevation: point" ;
+                discharge_cfs:instrument = "water_level_sensor" ;
+                discharge_cfs:comment = "" ;
+                
+            float discharge_cms(time) ;
+                discharge_cms:long_name = "Discharge" ;
+                discharge_cms:standard_name = "discharge_cms" ;
+                discharge_cms:units = "cms" ;
+                discharge_cms:_FillValue = -7999.0f ;
+                discharge_cms:valid_min = 0.0f ;
+                discharge_cms:valid_max = 15.0f ;
+                discharge_cms:coordinates = "time lat lon surface_elevation" ;
+                discharge_cms:source = "physical measurement" ;
+                discharge_cms:cell_methods = "time: fifteen_minute mean lat: point lon: point surface_elevation: point" ;
+                discharge_cms:instrument = "water_level_sensor" ;
+                discharge_cms:comment = "" ;
+
+    } // End Group
+
+    // Define Global Attributes:
+    :featureType = "timeSeries" ;
+    
+    :title = "One Day of Data from CW3E Hydrometeorology Station" ;
+    :summary = "Contains observations of various surface hydrometeorological properties. The data in thise file spans one day." ;
+    :institution = "Center for Western Weather and Water Extremes (CW3E), Scripps Insitution of Oceanography at the University of California San Diego" ;
+    :time_coverage_start = "" ;
+    :time_coverage_end = "" ;
+    :time_coverage_duration = "" ;
+    :time_coverage_resolution = "" ;
+    :date_created = "" ;
+    :history  = "" ;
+    :source = "physical measurement" ;
+    :processing_level = "L1 - Unprocessed raw data. The data in this file are raw data from the station and have not undergone any quality control. The data are provided “as is” and are intended for research purposes only. See `https://cw3e.ucsd.edu/disclaimer/` for more details" ;
+    
+    :creator_name = "CW3E Fieldwork Data Processing Pipeline" ;
+    :creator_email = "cw3e-fieldwork-g@ucsd.edu" ;
+    :creator_website = "cw3e.ucsd.edu" ;
+    
+    :cw3e_cdl_template_version = "1.0" ;
+    :cw3e_template_script = "" ;
+    :cw3e_processing_script = "" ;
+    :Conventions = "CF-1.8, ACDD-1.3" ;
+    :standard_name_vocabulary = "CF Standard Name Table v84" ;
+    :comment = "" ;
+    
+}
