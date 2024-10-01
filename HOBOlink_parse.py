@@ -138,52 +138,19 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
     # pass JSON data into a dateframe
     df = pd.DataFrame.from_dict(hobolink_data["observation_list"])
     # Parse data for stream gage
-    # Water Pressure
-    water_pressure = df.loc[df['sensor_measurement_type'] == 'Water Pressure']
-    # Check if the resulting DataFrame is empty
-    if water_pressure.empty:
-        # If no water pressure data is found, set default values
-        water_pressure_si = np.nan
-        water_pressure_us = np.nan
-        timestamp = np.nan
-    else:
-        water_pressure_si = water_pressure['si_value'].round(2).reset_index(drop=True)
-        water_pressure_us = water_pressure['us_value'].round(2).reset_index(drop=True)
-        # Date timestamps for data - each 'sensor_measurement_type' provides a 'timestamp' but only uses one value per timestamp so we drop duplicates
-        timestamp = water_pressure['timestamp'].reset_index(drop=True)
-        
-    # Difference Pressure
-    diff_pressure = df.loc[df['sensor_measurement_type'] == 'Diff Pressure']
-    # Check if the resulting DataFrame is empty
-    if diff_pressure.empty:
-        # If no water pressure data is found, set default values
-        diff_pressure_si = np.nan
-        diff_pressure_us = np.nan
-    else:
-        diff_pressure_si = diff_pressure['si_value'].round(2).reset_index(drop=True)
-        diff_pressure_us = diff_pressure['us_value'].round(2).reset_index(drop=True)
-
-    # Water Temperature
-    water_temp = df.loc[df['sensor_measurement_type'] == 'Water Temperature']
-    # Check if the resulting DataFrame is empty
-    if water_temp.empty:
-        # If no water pressure data is found, set default values
-        water_temp_si = np.nan
-        water_temp_us = np.nan
-    else:
-        water_temp_si = water_temp['si_value'].iloc[:].round(2).reset_index(drop=True)
-        water_temp_us = water_temp['us_value'].iloc[:].round(2).reset_index(drop=True)
-        
     # Water Level
     water_lvl = df.loc[df['sensor_measurement_type'] == 'Water Level']
     # Check if the resulting DataFrame is empty
     if water_lvl.empty:
-        # If no water pressure data is found, set default values
+        # If no water level data is found, set default values
         water_lvl_si = np.nan
         water_lvl_us = np.nan
+        timestamp = np.nan
     else:   
         water_lvl_si = water_lvl['si_value'].iloc[:].round(2).reset_index(drop=True)
         water_lvl_us = water_lvl['us_value'].iloc[:].round(2).reset_index(drop=True)
+        # Date timestamps for data - each 'sensor_measurement_type' provides a 'timestamp' but only uses one value per timestamp so we drop duplicates
+        timestamp = water_lvl['timestamp'].reset_index(drop=True)
     
     # Barometric Pressure
     bar_pressure = df.loc[df['sensor_measurement_type'] == 'Barometric Pressure']
@@ -195,7 +162,44 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
     else:
         bar_pressure_si = bar_pressure['si_value'].round(2).reset_index(drop=True)
         bar_pressure_us = bar_pressure['us_value'].round(2).reset_index(drop=True)
+     
+    # Difference Pressure
+    diff_pressure = df.loc[df['sensor_measurement_type'] == 'Diff Pressure']
+    # Check if the resulting DataFrame is empty
+    if diff_pressure.empty:
+        # If no diff pressure data is found, set default values
+        diff_pressure_si = np.nan
+        diff_pressure_us = np.nan
+    else:
+        diff_pressure_si = diff_pressure['si_value'].round(2).reset_index(drop=True)
+        diff_pressure_us = diff_pressure['us_value'].round(2).reset_index(drop=True)
     
+    # Water Pressure
+    water_pressure = df.loc[df['sensor_measurement_type'] == 'Water Pressure']
+    # Check if the resulting DataFrame is empty
+    if water_pressure.empty:
+        # If no water pressure data is found, set default values
+        # If there is no water pressure, do calc with diff pressure and baro pressure
+        water_pressure_si = (bar_pressure_si + diff_pressure_si).round(2)
+        water_pressure_us = (bar_pressure_us + diff_pressure_us).round(2)
+    else:
+        water_pressure_si = water_pressure['si_value'].round(2).reset_index(drop=True)
+        water_pressure_us = water_pressure['us_value'].round(2).reset_index(drop=True)
+        # Date timestamps for data - each 'sensor_measurement_type' provides a 'timestamp' but only uses one value per timestamp so we drop duplicates
+        #timestamp = water_pressure['timestamp'].reset_index(drop=True)
+
+
+    # Water Temperature
+    water_temp = df.loc[df['sensor_measurement_type'] == 'Water Temperature']
+    # Check if the resulting DataFrame is empty
+    if water_temp.empty:
+        # If no water temp data is found, set default values
+        water_temp_si = np.nan
+        water_temp_us = np.nan
+    else:
+        water_temp_si = water_temp['si_value'].iloc[:].round(2).reset_index(drop=True)
+        water_temp_us = water_temp['us_value'].iloc[:].round(2).reset_index(drop=True)
+
     """
     # snippet to read in water flow sensor measurements if rating curve is set in logger
     # commented out to use 100 point rating curve csv files to get discharge
@@ -219,16 +223,26 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
     dir_path = Path(base_path if base_path else './')
     #dir_path.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
     rating_curve_path = dir_path / f'{site_name}/Rating_Curve/{site_name}.rating_curve_100_points.csv'
-    # load the rating curve
-    rating_curve = pd.read_csv(rating_curve_path)
-    # Apply the rating curve to calculate discharge
-    water_flow_cfs = water_lvl_us.apply(lambda x: calculate_discharge(x, rating_curve))
-    water_flow_cfs = water_flow_cfs.round(6)
+    
+    # check if there is a rating curve. If not, set discharge to -9999.99
+    rating_curve_exists = os.path.exists(rating_curve_path)
+    if rating_curve_exists:
+        print('Rating curve found.')
+        # load the rating curve
+        rating_curve = pd.read_csv(rating_curve_path)
+        # Apply the rating curve to calculate discharge
+        water_flow_cfs = water_lvl_us.apply(lambda x: calculate_discharge(x, rating_curve))
+        water_flow_cfs = water_flow_cfs.round(6)
 
-    # Convert from cfs to cms with a vectorized operation
-    water_flow_cms = np.where(water_flow_cfs == -9999.99,
-                                        -9999.99,
-                                        water_flow_cfs * 0.0283168).round(6) 
+        # Convert from cfs to cms with a vectorized operation
+        water_flow_cms = np.where(water_flow_cfs == -9999.99,
+                                            -9999.99,
+                                            water_flow_cfs * 0.0283168).round(6)
+    else:
+        print('No rating curve. Setting all discharge to -9999.99')
+        # Set the discharge to -9999.99
+        water_flow_cfs = np.full(len(water_lvl_us),-9999.99)
+        water_flow_cms = np.full(len(water_lvl_us),-9999.99)
     
     # Create a new dataframe with the parsed data
     df2 = pd.DataFrame({'timestamp_UTC': timestamp,
@@ -281,6 +295,49 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
 
     # Reorder columns
     df2 = df2[desired_column_order]
+
+    # resample the data to correct 15min intervals
+    df2['timestamp_UTC'] = pd.to_datetime(df2['timestamp_UTC'])
+    # Check if any minute values are not 00, 15, 30, or 45
+    if any(df2['timestamp_UTC'].dt.minute % 15 != 0):
+        # Do something
+        print("There are timestamps with irregular minutes. Resampling.")
+        
+        # Set the timestamp column as the index
+        df2.set_index('timestamp_UTC', inplace=True)
+        # Step 1: Convert -9999.99 to NaN
+        df2.replace(-9999.99, np.nan, inplace=True)
+        # Define an aggregation dictionary that specifies how to aggregate each column
+        # For numeric columns, use 'mean'; exclude or use a different function for non-numeric columns
+        aggregations = {col: 'mean' for col in df2.columns if col != 'qc_status'}
+        # You can add the 'qc_status' column back later or handle it separately as needed
+        # Resample using the defined aggregations
+        df2_resampled = df2.resample('15T').agg(aggregations)
+        # Round the values to two decimal places
+        df2_resampled = df2_resampled.round(2)
+        # Fill NaN values with -9999.99 for numeric columns only
+        for col in df2_resampled.select_dtypes(include=['number']).columns:
+            if col != 'qc_status':  # Skip 'qc_status' column
+                df2_resampled[col] = df2_resampled[col].fillna(-9999.99)
+                
+        #add qc column back in
+        df2_resampled["qc_status"] = 'Provisional'
+        # Convert timestamp back to string format
+        df2_resampled.index = df2_resampled.index.strftime('%Y-%m-%d %H:%M:%SZ')
+        
+        df2_resampled = df2_resampled.rename_axis('timestamp_UTC').reset_index()
+        
+        df2 = df2_resampled
+        
+    else:
+        print("All timestamps have regular minutes (00, 15, 30, or 45).")
+        # Convert timestamp back to string format
+        df2['timestamp_UTC'] = df2['timestamp_UTC'].dt.strftime('%Y-%m-%d %H:%M:%SZ')
+        # Fill NaN values with -9999.99 for numeric columns only
+        for col in df2.select_dtypes(include=['number']).columns:
+            if col != 'qc_status':  # Skip 'qc_status' column
+                df2[col] = df2[col].fillna(-9999.99)
+
 
     #store data to master table for each site
     master_path = Path(base_path if base_path else f'./') / site_name
@@ -356,7 +413,7 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
                            df2['timestamp_UTC'].dt.hour.apply(lambda x: f'{x:02d}')])
 
     for (year, month, day, hour), group in grouped:
-        #SHEF Output
+        #SHEF Hourly Output
         shef_path = Path(base_path if base_path else f'./') / site_name / 'SHEF_Output' / str(year) / str(month) / str(day)
         shef_path.mkdir(parents=True, exist_ok=True)
         # Define the filename for SHEF files
@@ -382,10 +439,54 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
                 HGI = river stage (feet)
                 QRI = discharge (cubic feet per second)
                 """
-                data_line = f".A {cdec} {timestamp_shef[:8]} P DH{timestamp_shef[8:]} /HGI {format_shef_value(row['water_level_ft'])}/QRI {format_shef_value(row['discharge_cfs'])}"
+                # If the rating_cuve_exists, include the discharge in the shef code. If not, only include stage data.
+                if rating_curve_exists:
+                    data_line = f".A {cdec} {timestamp_shef[:8]} P DH{timestamp_shef[8:]} /HGI {format_shef_value(row['water_level_ft'])}/QRI {format_shef_value(row['discharge_cfs'])}"
+                else:
+                    data_line = f".A {cdec} {timestamp_shef[:8]} P DH{timestamp_shef[8:]} /HGI {format_shef_value(row['water_level_ft'])}"
+
                 # Write to the file
                 file.write(data_line + '\n')
                 os.chmod(shef_file_path, 0o775)
+        
+    #SHEF output - append all new data to one file
+    shef_path = Path(base_path if base_path else f'./') / site_name / 'SHEF_Output'
+    shef_path.mkdir(parents=True, exist_ok=True)
+    # Define the filename for SHEF files
+    shef_file = f"{cdec}_Streamflow_SHEF_latest.txt"
+
+    # Full path for the file to be saved
+    shef_file_path = shef_path / shef_file
+    
+    # Determine the file mode: 'a' to append if the file exists, 'w' to write otherwise
+    file_mode = 'a' if shef_file_path.exists() else 'w'
+    # check if there is any timestamp at the start of the new hour (00 minute)
+    #overwrite = df2['timestamp_UTC'].dt.minute.isin([0]).any()
+    #file_mode = 'w' if overwrite else 'a'
+        
+    # Open the file to write SHEF data
+    with shef_file_path.open(mode=file_mode) as file:
+        for _, row in df2.iterrows():
+            # Format the timestamp in SHEF format
+            timestamp_shef = row['timestamp_UTC'].strftime('%Y%m%d%H%M')
+            # Write stage and discharge lines in SHEF format
+            """
+            The .A format is designed for the transmission of one or more hydrometeorological parameters observed at various times for a single station.
+            .A is the format used
+            P indicates Pacific time
+            DH = hour of day and also include minute value e.g. for 21:15 will be written as 2115
+            HGI = river stage (feet)
+            QRI = discharge (cubic feet per second)
+            """
+            # If the rating_cuve_exists, include the discharge in the shef code. If not, only include stage data.
+            if rating_curve_exists:
+                data_line = f".A {cdec} {timestamp_shef[:8]} P DH{timestamp_shef[8:]} /HGI {format_shef_value(row['water_level_ft'])}/QRI {format_shef_value(row['discharge_cfs'])}"
+            else:
+                data_line = f".A {cdec} {timestamp_shef[:8]} P DH{timestamp_shef[8:]} /HGI {format_shef_value(row['water_level_ft'])}"
+
+            # Write to the file
+            file.write(data_line + '\n')
+            os.chmod(shef_file_path, 0o775)
 
     # Return both the number of records processed and the list of filenames
     return df2.shape[0] #, filename_list
