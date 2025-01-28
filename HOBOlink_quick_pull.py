@@ -6,6 +6,7 @@
 import requests, os, time, pandas as pd, csv, numpy as np
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv, find_dotenv
+#from pathlib import Path
 from HOBOlink_parse import get_new_token, parse_stream, timestamp_chunks, find_nan_optimized, backfill_stream, calculate_discharge
 
 # load .env file - the .env file is the best place to store sensitive info such as the user ID, and token information
@@ -18,8 +19,9 @@ base_dir = "/data/CW3E_data/CW3E_Streamflow_Archive/"
 
 # HOBOlink account and device info
 user_id = os.environ.get("USER_ID") # user ID found on HOBOlink
-logger_id='XXXXXXX' # update this to the correct Logger SN - can be found on HOBOlink
-site_id='XXX' # Change this to the appropriate site ID
+logger_id='22050044' # update this to the correct Logger SN - can be found on HOBOlink
+site_id='WHT' # Change this to the appropriate site ID
+cdec = 'WIC' # Change this to the appropriate cdec ID
 site_type = 'S' #S = streams and P = Precip
 
 #HOBOlink authentication server
@@ -39,12 +41,12 @@ client_secret = os.environ.get("CLIENT_SECRET")
 date_format = '%Y-%m-%d %H:%M:%S%z' # date timestamp format
 
 # start_time corresponds to the time in which the first packet of a data is pulled from
-start_str='2023-10-12 15:50:00Z' # update the start time in UTC
+start_str='2024-06-26 18:55:00Z' # update the start time in UTC
 start_dt = datetime.strptime(start_str, date_format)
 #start_time = start_dt.strftime("&start_date_time=%Y-%m-%d+%H") + "%3A" + start_dt.strftime("%M") + "%3A" + start_dt.strftime("%S")
 
 # end_time corresponds to the time for the last data packet that will be pulled
-end_str='2024-03-22 07:45:00Z'# update the end time in UTC
+end_str='2024-08-13 00:00:00Z'# update the end time in UTC
 end_dt = datetime.strptime(end_str, date_format)
 #end_time = end_dt.strftime("&end_date_time=%Y-%m-%d+%H") + "%3A" + end_dt.strftime("%M") + "%3A" + end_dt.strftime("%S")
 
@@ -83,8 +85,12 @@ for i in range(len(url_intervals)):
         if api_call_response.status_code == 200: 
             # Convert data to dict
             data = api_call_response.json() # data from HOBOlink will be in JSON JavaScript Object Notation
+            
+            # TODO: resample the data
+            
+            
             if len(data["observation_list"]) > 0 :
-                data_int, fnames = parse_stream(data, site_id, base_path=None, append_to_single_file=True)
+                data_int = parse_stream(data, site_id, cdec, base_path=base_dir, append_to_single_file=False)
             elif len(data["observation_list"]) == 0:
                 print('No data available.')
             break
@@ -104,9 +110,9 @@ for i in range(len(url_intervals)):
 #----------------------------------------------------------------------------------------------------------------------------------
 # Backfill data if data points were missed
 # check csv for missing data points
-file_csv = fnames[0]
+file_csv = f'{site_id}_MasterTable.csv'
 #nan_check = find_nan(file_csv)
-nan_check = find_nan_optimized(file_csv)
+nan_check = find_nan_optimized(f'{base_dir}/{site_id}/{file_csv}')
 print(nan_check)
 # If NaN's or blank spaces exist backfill that data by pulling data again
 # check if NaN's or blank spaces were found
@@ -171,12 +177,15 @@ else:
     print("No NaN's or blanks found. Data is complete.")
 
 #------------------------------------------------------------------------------------------------------------------------------
+# TODO: have it resample data between the start and end date.
+# Have it put the resampled data into the correct place in the MasterTable.
+'''
 # Resample data if neccessary - this is only necessary for streams at the moment. Will output a seperate csv from the raw data
 # Define the target date for comparison (March 15th, 2024)
-target_date = datetime(2024, 3, 15, tzinfo=timezone.utc) # all streams were switch to 15th minute logging intervals around this time
+target_date = datetime(2024, 8, 1, tzinfo=timezone.utc) # all streams were switch to 15th minute logging intervals around this time
 # Check if start_dt is before the target date and if it also a Stream site (S)
 if site_type == 'S' or site_type == "s" and start_dt < target_date:
-    df = pd.read_csv(file_csv)
+    df = pd.read_csv(f'{base_dir}/{site_id}/{file_csv}')
     # Convert the timestamp column to datetime
     df['timestamp_UTC'] = pd.to_datetime(df['timestamp_UTC'])
     # Set the timestamp column as the index
@@ -202,17 +211,26 @@ if site_type == 'S' or site_type == "s" and start_dt < target_date:
     df_resampled.index = df_resampled.index.strftime('%Y-%m-%d %H:%M:%SZ')
     # Output the resampled data to a new CSV file
     # Save data to csv file
-    resampled_csv = site_id + '_resampled_data.csv'
+    resampled_csv = f'{base_dir}/{site_id}/{site_id}_resampled_data.csv'
     file_exists = os.path.isfile(resampled_csv)
     if file_exists == True:
         header = False
     elif file_exists == False:
         header = True
+    #df_resampled.to_csv(resampled_csv, mode='a', header=header, escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
+    #print("Data has been resampled and stored in:", resampled_csv)
+    
     df_resampled.to_csv(resampled_csv, mode='a', header=header, escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
     print("Data has been resampled and stored in:", resampled_csv)
     
 print("Data pull complete for:", site_id)
 
+# Write the RawDaily files.
+write_RawDaily(pd.read_csv(resampled_csv), site_id, base_dir)
+
+# Write the hourly SHEF_Output files, and a backfill file with all the shef codes to send to CDEC.
+#write_SHEFhourly(pd.read_csv(resampled_csv), site_id, base_dir)
+'''
 #-----------------------------------------------------------------------------------------
 # process stream data
 # Define the path to the rating curve and stage data files
@@ -225,6 +243,7 @@ site_csv_path = Path(base_path if base_path else f'./{site_name}.csv')
 filename = f"{site_name}.csv"
 site_csv_path = site_csv_path / filename
 """
+'''
 rating_curve_path = base_dir / f'{site_id}/Rating_Curve/{site_id}.rating_curve_100_points.csv' #if running within parse script change site_id to site_name
 stage_data_path = "whatever data var we're using for stage data" # if running inside parse script it will be the column name of the dataframe
 
@@ -244,7 +263,7 @@ stage_data['discharge_cms'] = stage_data["discharge_cfs"] * 0.0283168
 print(stage_data)
 
 # store data to csv
-
+'''
 
 
 #End of script
