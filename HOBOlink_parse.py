@@ -135,70 +135,64 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
     - site_name: str, the name of the site, used in the directory structure and file naming. Typically a 3 character ID
     - base_path: str or None, the base path where files will be saved. If None, uses a default directory structure.
     """   
-    # pass JSON data into a dateframe
-    df = pd.DataFrame.from_dict(hobolink_data["observation_list"])
-    # Parse data for stream gage
-    # Water Level
-    water_lvl = df.loc[df['sensor_measurement_type'] == 'Water Level']
-    # Check if the resulting DataFrame is empty
-    if water_lvl.empty:
-        # If no water level data is found, set default values
-        water_lvl_si = np.nan
-        water_lvl_us = np.nan
-        timestamp = np.nan
-    else:   
-        water_lvl_si = water_lvl['si_value'].iloc[:].round(2).reset_index(drop=True)
-        water_lvl_us = water_lvl['us_value'].iloc[:].round(2).reset_index(drop=True)
-        # Date timestamps for data - each 'sensor_measurement_type' provides a 'timestamp' but only uses one value per timestamp so we drop duplicates
-        timestamp = water_lvl['timestamp'].reset_index(drop=True)
-    
-    # Barometric Pressure
-    bar_pressure = df.loc[df['sensor_measurement_type'] == 'Barometric Pressure']
-    # Check if the resulting DataFrame is empty
-    if bar_pressure.empty:
-        # If no barometric pressure data is found, set default values
-        bar_pressure_si = np.nan
-        bar_pressure_us = np.nan
-    else:
-        bar_pressure_si = bar_pressure['si_value'].round(2).reset_index(drop=True)
-        bar_pressure_us = bar_pressure['us_value'].round(2).reset_index(drop=True)
-     
-    # Difference Pressure
-    diff_pressure = df.loc[df['sensor_measurement_type'] == 'Diff Pressure']
-    # Check if the resulting DataFrame is empty
-    if diff_pressure.empty:
-        # If no diff pressure data is found, set default values
-        diff_pressure_si = np.nan
-        diff_pressure_us = np.nan
-    else:
-        diff_pressure_si = diff_pressure['si_value'].round(2).reset_index(drop=True)
-        diff_pressure_us = diff_pressure['us_value'].round(2).reset_index(drop=True)
-    
-    # Water Pressure
-    water_pressure = df.loc[df['sensor_measurement_type'] == 'Water Pressure']
-    # Check if the resulting DataFrame is empty
-    if water_pressure.empty:
-        # If no water pressure data is found, set default values
-        # If there is no water pressure, do calc with diff pressure and baro pressure
-        water_pressure_si = (bar_pressure_si + diff_pressure_si).round(2)
-        water_pressure_us = (bar_pressure_us + diff_pressure_us).round(2)
-    else:
-        water_pressure_si = water_pressure['si_value'].round(2).reset_index(drop=True)
-        water_pressure_us = water_pressure['us_value'].round(2).reset_index(drop=True)
-        # Date timestamps for data - each 'sensor_measurement_type' provides a 'timestamp' but only uses one value per timestamp so we drop duplicates
-        #timestamp = water_pressure['timestamp'].reset_index(drop=True)
 
+    observation_list = hobolink_data["observation_list"]
+    
+    # Put all the obs values into a single dataframe, not including battery values
+    rows = []
+    for obs in observation_list:
+        if(obs['sensor_measurement_type'] != 'Battery'):
+            rows.append({
+                "timestamp": obs["timestamp"],
+                f"{obs['sensor_measurement_type']} si": obs["si_value"],
+                f"{obs['sensor_measurement_type']} us": obs["us_value"],
+            })
+    df = pd.DataFrame(rows)
+    
+    # If there's no values, or there were only Battery V measurements, return
+    if df.empty:
+        print('No new data found.')
+        return df.shape[0]
+    
+    # Handle duplicate timestamps by grouping and aggregating
+    df = df.groupby("timestamp", as_index=False).first()
+    
+    # remove any rows with nan values
+    # uncomment this if we don't want any data from a timestamp when one of the values is missing.
+    df = df.dropna()
+    
+    # reset index
+    df = df.reset_index(drop=True)
+    
+    # If there's no water pressure observations, add the barometric pressure and diff pressure to get water pressure obs
+    if 'Water Pressure si' not in df:
+        df['Water Pressure si'] = df['Barometric Pressure si'] + df['Diff Pressure si']
+        df['Water Pressure us'] = df['Barometric Pressure si'] + df['Diff Pressure us']
 
-    # Water Temperature
-    water_temp = df.loc[df['sensor_measurement_type'] == 'Water Temperature']
-    # Check if the resulting DataFrame is empty
-    if water_temp.empty:
-        # If no water temp data is found, set default values
-        water_temp_si = np.nan
-        water_temp_us = np.nan
-    else:
-        water_temp_si = water_temp['si_value'].iloc[:].round(2).reset_index(drop=True)
-        water_temp_us = water_temp['us_value'].iloc[:].round(2).reset_index(drop=True)
+    # Round all numeric values to 2 decimal places
+    df = df.round(2)
+
+    # Rename columns to match MasterTable column names
+    new_column_names = {'timestamp': 'timestamp_UTC',
+                        'Water Temperature si': 'water_temperature_Celsius',
+                        'Water Level si': 'water_level_m',
+                        'Water Pressure si': 'water_pressure_kPa',
+                        'Water Pressure us': 'water_pressure_psi',
+                        'Diff Pressure si': 'diff_pressure_kPa',
+                        'Diff Pressure us': 'diff_pressure_psi',
+                        'Water Temperature us': 'water_temperature_Fahrenheit',
+                        'Water Level us': 'water_level_ft',
+                        'Barometric Pressure si': 'barometric_pressure_kPa',
+                        'Barometric Pressure us': 'barometric_pressure_psi',
+                        }
+    
+    df = df.rename(columns=new_column_names)
+    
+    # If one of the columns doesn't exist, create a column with the right name and fill with nans
+    for col in new_column_names.values():
+        if col not in df.columns:
+            df[col] = np.nan
+
 
     """
     # snippet to read in water flow sensor measurements if rating curve is set in logger
@@ -218,6 +212,7 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
         # Convert L/s to m³/s and round to the second decimal point
         water_flow_cms = (water_flow_si * 0.001).round(2)
     """
+
     # Define the path for the long-running file
     # if base_path=None the rating curve csv file must be stored in the same directory as where the script is running
     dir_path = Path(base_path if base_path else './')
@@ -231,7 +226,7 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
         # load the rating curve
         rating_curve = pd.read_csv(rating_curve_path)
         # Apply the rating curve to calculate discharge
-        water_flow_cfs = water_lvl_us.apply(lambda x: calculate_discharge(x, rating_curve))
+        water_flow_cfs = df['water_level_ft'].apply(lambda x: calculate_discharge(x, rating_curve))
         water_flow_cfs = water_flow_cfs.round(6)
 
         # Convert from cfs to cms with a vectorized operation
@@ -241,38 +236,19 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
     else:
         print('No rating curve. Setting all discharge to -9999.99')
         # Set the discharge to -9999.99
-        water_flow_cfs = np.full(len(water_lvl_us),-9999.99)
-        water_flow_cms = np.full(len(water_lvl_us),-9999.99)
+        water_flow_cfs = np.full(len(df['water_level_ft']),-9999.99)
+        water_flow_cms = np.full(len(df['water_level_ft']),-9999.99)
     
-    # Create a new dataframe with the parsed data
-    df2 = pd.DataFrame({'timestamp_UTC': timestamp,
-                        'water_temperature_Celsius': water_temp_si,
-                        'water_level_m': water_lvl_si,
-                        'water_pressure_kPa': water_pressure_si,
-                        'water_pressure_psi': water_pressure_us,
-                        'diff_pressure_kPa': diff_pressure_si,
-                        'diff_pressure_psi': diff_pressure_us,
-                        'water_temperature_Fahrenheit': water_temp_us,
-                        'water_level_ft': water_lvl_us,
-                        'barometric_pressure_kPa': bar_pressure_si,
-                        'barometric_pressure_psi': bar_pressure_us,
-                        'discharge_cfs': water_flow_cfs,
-                        'discharge_cms': water_flow_cms
-                        })
+    # Add discharge columns to the dataframe
+    df2 = df
+    df2['discharge_cfs'] = water_flow_cfs
+    df2['discharge_cms'] = water_flow_cms
 
     # Define new columns - used for QC process
-    new_columns = {
-        'level_corrected_ft': [-9999.99] * len(df2),
-        'level_corrected_m': [-9999.99] * len(df2),
-        'level_corrected_cm': [-9999.99] * len(df2),
-        'qc_status': ["Provisional"] * len(df2)
-        }
-
-    # Convert new columns to DataFrame
-    new_columns_df = pd.DataFrame(new_columns)
-
-    # Concatenate existing DataFrame with new columns
-    df2 = pd.concat([df2, new_columns_df], axis=1)
+    df2['level_corrected_ft'] = [-9999.99] * len(df2)
+    df2['level_corrected_m'] = [-9999.99] * len(df2)
+    df2['level_corrected_cm'] = [-9999.99] * len(df2)
+    df2['qc_status'] = ["Provisional"] * len(df2)
 
     # Define the desired order of columns
     desired_column_order = ['timestamp_UTC',
