@@ -146,7 +146,12 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
                 "timestamp": obs["timestamp"],
                 f"{obs['sensor_measurement_type']} si": obs["si_value"],
                 f"{obs['sensor_measurement_type']} us": obs["us_value"],
-            })
+                })
+        else: # If it's a battery voltage observation, only include it once in V
+            rows.append({
+                "timestamp": obs["timestamp"],
+                f"{obs['sensor_measurement_type']}": obs["si_value"]
+                })
     df = pd.DataFrame(rows)
     
     # If there's no values, or there were only Battery V measurements, return
@@ -156,6 +161,9 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
     
     # Handle duplicate timestamps by grouping and aggregating
     df = df.groupby("timestamp", as_index=False).first()
+    
+    # Remove rows that are just battery data
+    df = df[~((df["Battery"].notna()) & (df.drop(columns=["timestamp", "Battery"]).isna().all(axis=1)))]
     
     # remove any rows with nan values
     # uncomment this if we don't want any data from a timestamp when one of the values is missing.
@@ -184,6 +192,7 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
                         'Water Level us': 'water_level_ft',
                         'Barometric Pressure si': 'barometric_pressure_kPa',
                         'Barometric Pressure us': 'barometric_pressure_psi',
+                        'Battery': 'battery_V'
                         }
     
     df = df.rename(columns=new_column_names)
@@ -240,7 +249,7 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
         water_flow_cms = np.full(len(df['water_level_ft']),-9999.99)
     
     # Add discharge columns to the dataframe
-    df2 = df
+    df2 = df.drop(columns=['battery_V'])
     df2['discharge_cfs'] = water_flow_cfs
     df2['discharge_cms'] = water_flow_cms
 
@@ -374,10 +383,13 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
     
     #------------------------------------------------------------------------------
     # convert files to shef - must be done outside since the other files are in UTC 
+    # Add battery column back in
+    df2['battery_V'] = df['battery_V']
+    
     # Ensure timestamps include a timezone offset instead of just 'UTC'
     # If not, you'll need to preprocess them to include a proper offset (e.g., replace 'UTC' with '+0000')
     df2['timestamp_UTC'] = pd.to_datetime(df2['timestamp_UTC'], format='%Y-%m-%d %H:%M:%S%z')
-
+    
     # Convert to Pacific Time
     pacific = pytz.timezone('US/Pacific')
     df2['timestamp_UTC'] = df2['timestamp_UTC'].dt.tz_convert(pacific)
@@ -415,11 +427,18 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
                 HGI = river stage (feet)
                 QRI = discharge (cubic feet per second)
                 """
-                # If the rating_cuve_exists, include the discharge in the shef code. If not, only include stage data.
+                # Write a shef line with the stage value
+                data_line = f".A {cdec} {timestamp_shef[:8]} P DH{timestamp_shef[8:]} /HGI {format_shef_value(row['water_level_ft'])}"
+                # If the rating_cuve_exists, include the discharge in the shef code.
                 if rating_curve_exists:
-                    data_line = f".A {cdec} {timestamp_shef[:8]} P DH{timestamp_shef[8:]} /HGI {format_shef_value(row['water_level_ft'])}/QRI {format_shef_value(row['discharge_cfs'])}"
-                else:
-                    data_line = f".A {cdec} {timestamp_shef[:8]} P DH{timestamp_shef[8:]} /HGI {format_shef_value(row['water_level_ft'])}"
+                    data_line = data_line + f"/QRI {format_shef_value(row['discharge_cfs'])}"
+                # Include the water temperature (TWI for Fahrenheit, instantaneous)
+                data_line = data_line + f"/TWI {format_shef_value(row['water_temperature_Fahrenheit'])}"
+                # Include the barometric pressure (PAI in inHg, instantaneous).
+                data_line = data_line + f"/PAI {format_shef_value(row['barometric_pressure_psi']*2.03602)}"
+                # Include the battery data (VBI for battery voltage in Volts, instantaneous)
+                data_line = data_line + f"/VBI {format_shef_value(row['battery_V'])}"
+                
 
                 # Write to the file
                 file.write(data_line + '\n')
@@ -454,11 +473,17 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
             HGI = river stage (feet)
             QRI = discharge (cubic feet per second)
             """
-            # If the rating_cuve_exists, include the discharge in the shef code. If not, only include stage data.
+            # Write a shef line with the stage value
+            data_line = f".A {cdec} {timestamp_shef[:8]} P DH{timestamp_shef[8:]} /HGI {format_shef_value(row['water_level_ft'])}"
+            # If the rating_cuve_exists, include the discharge in the shef code.
             if rating_curve_exists:
-                data_line = f".A {cdec} {timestamp_shef[:8]} P DH{timestamp_shef[8:]} /HGI {format_shef_value(row['water_level_ft'])}/QRI {format_shef_value(row['discharge_cfs'])}"
-            else:
-                data_line = f".A {cdec} {timestamp_shef[:8]} P DH{timestamp_shef[8:]} /HGI {format_shef_value(row['water_level_ft'])}"
+                data_line = data_line + f"/QRI {format_shef_value(row['discharge_cfs'])}"
+            # Include the water temperature (TW for Fahrenheit, TU for Celcius)
+            data_line = data_line + f"/TWI {format_shef_value(row['water_temperature_Fahrenheit'])}"
+            # Include the barometric pressure (PAI in inHg, instantaneous).
+            data_line = data_line + f"/PAI {format_shef_value(row['barometric_pressure_psi']*2.03602)}"
+            # Include the battery data (VBI for battery voltage in Volts, instantaneous)
+            data_line = data_line + f"/VBI {format_shef_value(row['battery_V'])}"
 
             # Write to the file
             file.write(data_line + '\n')
@@ -467,6 +492,7 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
     # Return both the number of records processed and the list of filenames
     return df2.shape[0] #, filename_list
 
+# TODO: this function is no longer up to date
 def backfill_stream(hobolink_data,site_name, base_path=None, append_to_single_file=False):
     # pass JSON data into a dateframe
     df = pd.DataFrame.from_dict(hobolink_data["observation_list"])
