@@ -175,7 +175,7 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
     # If there's no water pressure observations, add the barometric pressure and diff pressure to get water pressure obs
     if 'Water Pressure si' not in df:
         df['Water Pressure si'] = df['Barometric Pressure si'] + df['Diff Pressure si']
-        df['Water Pressure us'] = df['Barometric Pressure si'] + df['Diff Pressure us']
+        df['Water Pressure us'] = df['Barometric Pressure us'] + df['Diff Pressure us']
 
     # Round all numeric values to 2 decimal places
     df = df.round(2)
