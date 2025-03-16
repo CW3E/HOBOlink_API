@@ -124,7 +124,7 @@ def start_time_offset(time_string, logging_int, target_format=None):
     return dt_time, timestamp
      
 # function to parse the data from the HOBOlink API
-def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_single_file=False):
+def parse_stream(hobolink_data, site_name, cdec=None, base_path=None, shef_toggle=False):
     
     """
     Parses JSON data that was pulled and found with the dictionary key "observation_list"
@@ -136,23 +136,42 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
     - base_path: str or None, the base path where files will be saved. If None, uses a default directory structure.
     """   
 
-    observation_list = hobolink_data["observation_list"]
+    observation_list = hobolink_data["data"]
     
-    # Put all the obs values into a single dataframe, not including battery values
+    # Define units - will depend on what sensors are connected
+    si_units = {"kPa", "°C", "meters"}
+    us_units = {"psi", "°F", "feet"}
+
+    # Process observations into a list for DataFrame
     rows = []
+    tracked_units = set()  # To track encountered units (excluding battery voltage)
+
     for obs in observation_list:
-        if(obs['sensor_measurement_type'] != 'Battery'):
-            rows.append({
-                "timestamp": obs["timestamp"],
-                f"{obs['sensor_measurement_type']} si": obs["si_value"],
-                f"{obs['sensor_measurement_type']} us": obs["us_value"],
-                })
-        else: # If it's a battery voltage observation, only include it once in V
-            rows.append({
-                "timestamp": obs["timestamp"],
-                f"{obs['sensor_measurement_type']}": obs["si_value"]
-                })
+        unit = obs["unit"]
+        sensor_type = obs["sensor_measurement_type"]
+        
+        if sensor_type.lower() != "battery":  # Ignore battery voltage
+            tracked_units.add(unit)
+
+        if unit in si_units:
+            key = f"{sensor_type} si"
+        elif unit in us_units:
+            key = f"{sensor_type} us"
+        else:  # Battery voltage or other unknown units
+            key = sensor_type
+
+        rows.append({"timestamp": obs["timestamp"], key: obs["value"]})
+
+    # Create DataFrame
     df = pd.DataFrame(rows)
+
+    # Determine if all non-battery units are SI or US
+    if tracked_units.issubset(si_units):
+        unit_type = "SI"
+    elif tracked_units.issubset(us_units):
+        unit_type = "US"
+    else:
+        unit_type = "Mixed"
     
     # If there's no values, or there were only Battery V measurements, return
     if df.empty:
@@ -172,13 +191,30 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
     # reset index
     df = df.reset_index(drop=True)
     
-    # If there's no water pressure observations, add the barometric pressure and diff pressure to get water pressure obs
-    if 'Water Pressure si' not in df:
-        df['Water Pressure si'] = df['Barometric Pressure si'] + df['Diff Pressure si']
-        df['Water Pressure us'] = df['Barometric Pressure us'] + df['Diff Pressure us']
+    #convert all measurements to either SI or US units
+    if unit_type == "US":
+        # convert all US units to SI and add to dataframe
+        if 'Water Pressure us' not in df:
+            df['Water Pressure us'] = df['Barometric Pressure us'] + df['Diff Pressure us']
+        df['Water Pressure si'] = df['Water Pressure us'] * 6.89476
+        df['Diff Pressure si'] = df['Diff Pressure us'] * 6.89476
+        df['Barometric Pressure si'] = df['Barometric Pressure us'] * 6.89476
+        df['Water Temperature si'] = (df['Water Temperature us'] - 32) * (5/9)
+        df['Water Level si'] = df['Water Level us'] * 0.3048
+    elif unit_type == "SI":
+        # convert all SI units to US and add to dataframe
+        if 'Water Pressure si' not in df:
+            df['Water Pressure si'] = df['Barometric Pressure si'] + df['Diff Pressure si']
+        df['Water Pressure us'] = df['Water Pressure si'] / 6.89476
+        df['Diff Pressure us'] = df['Diff Pressure si'] / 6.89476
+        df['Barometric Pressure us'] = df['Barometric Pressure si'] / 6.89476
+        df['Water Temperature us'] = df['Water Temperature si'] * (9/5) + 32
+        df['Water Level us'] = df['Water Level si'] * 3.28084
+    else:
+        print("US and SI units are mixed")
 
-    # Round all numeric values to 2 decimal places
-    df = df.round(2)
+    # Apply rounding and formatting to all numeric values
+    df = df.applymap(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
 
     # Rename columns to match MasterTable column names
     new_column_names = {'timestamp': 'timestamp_UTC',
@@ -202,25 +238,7 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
         if col not in df.columns:
             df[col] = np.nan
 
-
-    """
-    # snippet to read in water flow sensor measurements if rating curve is set in logger
-    # commented out to use 100 point rating curve csv files to get discharge
-    # Attempt to filter for Water Flow measurements
-    water_flow = df.loc[df['sensor_measurement_type'] == 'Water Flow']
-
-    # Check if the resulting DataFrame is empty
-    if water_flow.empty:
-        # If no Water Flow data is found, set default values
-        water_flow_cfs = -9999.99
-        water_flow_cms = -9999.99
-    else:
-        # Proceed with the normal logic for non-empty DataFrame
-        water_flow_si = water_flow['si_value'].round(2).reset_index(drop=True)
-        water_flow_cfs = water_flow['us_value'].round(2).reset_index(drop=True)
-        # Convert L/s to m³/s and round to the second decimal point
-        water_flow_cms = (water_flow_si * 0.001).round(2)
-    """
+# check for 15 minute data and then resample
 
     # Define the path for the long-running file
     # if base_path=None the rating curve csv file must be stored in the same directory as where the script is running
@@ -259,163 +277,232 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
     df2['level_corrected_cm'] = [-9999.99] * len(df2)
     df2['qc_status'] = ["Provisional"] * len(df2)
 
-    # Define the desired order of columns
-    desired_column_order = ['timestamp_UTC',
-                            'water_temperature_Celsius',
-                            'water_level_m',
-                            'water_pressure_kPa',
-                            'water_pressure_psi',
-                            'diff_pressure_kPa',
-                            'diff_pressure_psi',
-                            'water_temperature_Fahrenheit',
-                            'water_level_ft',
-                            'barometric_pressure_kPa',
-                            'barometric_pressure_psi',
-                            'level_corrected_ft',
-                            'level_corrected_m',
-                            'level_corrected_cm',
-                            'discharge_cfs',
-                            'discharge_cms',
-                            'qc_status']
+    # Define the desired order of columns for the processed data
+    desired_column_order = [
+        'timestamp_UTC',
+        'water_temperature_Celsius',
+        'water_level_m',
+        'water_pressure_kPa',
+        'water_pressure_psi',
+        'diff_pressure_kPa',
+        'diff_pressure_psi',
+        'water_temperature_Fahrenheit',
+        'water_level_ft',
+        'barometric_pressure_kPa',
+        'barometric_pressure_psi',
+        'level_corrected_ft',
+        'level_corrected_m',
+        'level_corrected_cm',
+        'discharge_cfs',
+        'discharge_cms',
+        'qc_status'
+    ]
 
-    # Reorder columns
+    # Define columns for Raw data (subset)
+    raw_columns = [
+        'timestamp_UTC',
+        'water_temperature_Celsius',
+        'water_level_m',
+        'water_pressure_kPa',
+        'water_pressure_psi',
+        'diff_pressure_kPa',
+        'diff_pressure_psi',
+        'water_temperature_Fahrenheit',
+        'water_level_ft',
+        'barometric_pressure_kPa',
+        'barometric_pressure_psi'
+    ]
+
+    # Reorder columns for processed data
     df2 = df2[desired_column_order]
 
-    # resample the data to correct 15min intervals
+    # Resample the data to correct 15-minute intervals
     df2['timestamp_UTC'] = pd.to_datetime(df2['timestamp_UTC'])
-    # Check if any minute values are not 00, 15, 30, or 45
+
     if any(df2['timestamp_UTC'].dt.minute % 15 != 0):
-        # Do something
         print("There are timestamps with irregular minutes. Resampling.")
         
-        # Set the timestamp column as the index
         df2.set_index('timestamp_UTC', inplace=True)
-        # Step 1: Convert -9999.99 to NaN
         df2.replace(-9999.99, np.nan, inplace=True)
-        # Define an aggregation dictionary that specifies how to aggregate each column
-        # For numeric columns, use 'mean'; exclude or use a different function for non-numeric columns
+        
+        # Define aggregation rules (mean for numeric columns)
         aggregations = {col: 'mean' for col in df2.columns if col != 'qc_status'}
-        # You can add the 'qc_status' column back later or handle it separately as needed
-        # Resample using the defined aggregations
-        df2_resampled = df2.resample('15T').agg(aggregations)
-        # Round the values to two decimal places
-        df2_resampled = df2_resampled.round(2)
-        # Fill NaN values with -9999.99 for numeric columns only
+        
+        # Resample and round data
+        df2_resampled = df2.resample('15T').agg(aggregations).round(2)
+
+        # Fill NaN values with -9999.99 for numeric columns
         for col in df2_resampled.select_dtypes(include=['number']).columns:
-            if col != 'qc_status':  # Skip 'qc_status' column
-                df2_resampled[col] = df2_resampled[col].fillna(-9999.99)
-                
-        #add qc column back in
+            df2_resampled[col] = df2_resampled[col].fillna(-9999.99)
+
         df2_resampled["qc_status"] = 'Provisional'
-        # Convert timestamp back to string format
         df2_resampled.index = df2_resampled.index.strftime('%Y-%m-%d %H:%M:%SZ')
         
         df2_resampled = df2_resampled.rename_axis('timestamp_UTC').reset_index()
-        
         df2 = df2_resampled
-        
     else:
         print("All timestamps have regular minutes (00, 15, 30, or 45).")
-        # Convert timestamp back to string format
         df2['timestamp_UTC'] = df2['timestamp_UTC'].dt.strftime('%Y-%m-%d %H:%M:%SZ')
-        # Fill NaN values with -9999.99 for numeric columns only
+
+        # Fill NaN values with -9999.99
         for col in df2.select_dtypes(include=['number']).columns:
-            if col != 'qc_status':  # Skip 'qc_status' column
-                df2[col] = df2[col].fillna(-9999.99)
+            df2[col] = df2[col].fillna(-9999.99)
 
+    # Set up base master path
+    master_path = Path(base_path if base_path else './') / site_name
 
-    #store data to master table for each site
-    master_path = Path(base_path if base_path else f'./') / site_name
-    master_path.mkdir(parents=True, exist_ok=True)
-    master_table = f"{site_name}_MasterTable.csv"
-    master_table_path = master_path / master_table
-    mode = 'a' if master_table_path.exists() else 'w'
-    header = not master_table_path.exists()
-    # record master table csv
-    df2.to_csv(master_table_path, mode=mode, index=False, header=header, escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
-    os.chmod(master_table_path, 0o775)
+    # Create subdirectories for Raw and Processed
+    raw_path = master_path / "Raw"
+    processed_path = master_path / "Processed"
+    raw_path.mkdir(parents=True, exist_ok=True)
+    processed_path.mkdir(parents=True, exist_ok=True)
 
+    # File names
+    master_table_raw = raw_path / f"{site_name}_MasterTable_Raw.csv"
+    master_table_processed = processed_path / f"{site_name}_MasterTable_Processed.csv"
 
+    # Write to Raw CSV (only subset of columns)
+    df2[raw_columns].to_csv(master_table_raw, mode='a' if master_table_raw.exists() else 'w', 
+                            index=False, header=not master_table_raw.exists(), 
+                            escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
+
+    # Set file permissions for Raw (User: RW, Group: R, Others: R) = `0o644`
+    os.chmod(master_table_raw, 0o744)
+
+    # Write to Processed CSV (all columns)
+    df2.to_csv(master_table_processed, mode='a' if master_table_processed.exists() else 'w', 
+            index=False, header=not master_table_processed.exists(), 
+            escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
+
+    # Set file permissions for Processed (User: RW, Group: RWX, Others: R) = `0o744`
+    os.chmod(master_table_processed, 0o774)
+
+    # Convert timestamp back for grouping
     df2['timestamp_UTC'] = pd.to_datetime(df2['timestamp_UTC'], format='%Y-%m-%d %H:%M:%S%z')
-    # Group data by date
-    grouped = df2.groupby([df2['timestamp_UTC'].dt.year, 
-                           df2['timestamp_UTC'].dt.month.apply(lambda x: f'{x:02d}'), 
-                           df2['timestamp_UTC'].dt.day.apply(lambda x: f'{x:02d}'),
-                           df2['timestamp_UTC'].dt.hour.apply(lambda x: f'{x:02d}00')])
 
-    #filename_list = []  # Initialize the list to record filenames
+    # Group data by date and hour
+    grouped = df2.groupby([
+        df2['timestamp_UTC'].dt.year,
+        df2['timestamp_UTC'].dt.month.apply(lambda x: f'{x:02d}'),
+        df2['timestamp_UTC'].dt.day.apply(lambda x: f'{x:02d}'),
+        df2['timestamp_UTC'].dt.hour.apply(lambda x: f'{x:02d}00')
+    ])
 
-    # store data
-    
-    if append_to_single_file:
-        # Define the path for the long-running file
-        directory_path = Path(base_path if base_path else './')
-        directory_path.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
-        filename = f"{site_name}_MasterTable.csv"
-        filepath = directory_path / filename
-        df2['timestamp_UTC'] = df2['timestamp_UTC'].dt.strftime('%Y-%m-%d %H:%M:%S') + 'Z'
-        mode = 'a' if filepath.exists() else 'w'
-        header = not filepath.exists()
+    # Raw Daily & Processed Daily
+    for (year, month, day, hour), group in grouped:
         
-        # Append data to the single file
-        df2.to_csv(filepath, mode=mode, index=False, header=header, escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
-        os.chmod(filepath, 0o775)
-        #filename_list.append(filepath.name)  # Record the filename
-    else:
-        for (year, month, day, hour), group in grouped:
-            
-            # daily csv files
-            directory_path = Path(base_path if base_path else f'./') / site_name / 'RawDaily' / str(year) / str(month)
-            directory_path.mkdir(parents=True, exist_ok=True)
-            filename = f"{site_name}_{year}{month}{day}.csv"
-            filepath = directory_path / filename
-            mode_daily = 'a' if filepath.exists() else 'w'
-            header_daily = not filepath.exists()   
-            
-            # reset 'timestamp_UTC' desired format
-            group['timestamp_UTC'] = group['timestamp_UTC'].dt.strftime('%Y-%m-%d %H:%M:%S') + 'Z'
-            
-            # record daily csv file
-            group.to_csv(filepath, mode=mode_daily, index=False, header=header_daily, escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
-            os.chmod(filepath, 0o775)
-            #filename_list.append(filepath.name)  # Record the filename
-            
+        # **Raw Daily**
+        raw_daily_path = raw_path / "Raw_Daily" / str(year) / str(month)
+        raw_daily_path.mkdir(parents=True, exist_ok=True)
+        raw_daily_file = raw_daily_path / f"{site_name}_{year}{month}{day}.csv"
+        
+        # Format timestamp for storage
+        group['timestamp_UTC'] = group['timestamp_UTC'].dt.strftime('%Y-%m-%d %H:%M:%S') + 'Z'
+        
+        # Store only selected raw columns
+        group[raw_columns].to_csv(raw_daily_file, mode='a' if raw_daily_file.exists() else 'w',
+                                index=False, header=not raw_daily_file.exists(),
+                                escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
+
+        # Set file permissions for Raw Daily (User: RWX, Group: R, Others: R) = `0o744`
+        os.chmod(raw_daily_file, 0o744)
+
+        # **Processed Daily**
+        processed_daily_path = processed_path / "Processed_Daily" / str(year) / str(month)
+        processed_daily_path.mkdir(parents=True, exist_ok=True)
+        processed_daily_file = processed_daily_path / f"{site_name}_{year}{month}{day}.csv"
+        
+        # Store entire DataFrame
+        group.to_csv(processed_daily_file, mode='a' if processed_daily_file.exists() else 'w',
+                    index=False, header=not processed_daily_file.exists(),
+                    escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
+
+    # Set file permissions for Processed Daily (User: RWX, Group: R, Others: R) = `0o744`
+    os.chmod(processed_daily_file, 0o774)            
     
     #------------------------------------------------------------------------------
-    # convert files to shef - must be done outside since the other files are in UTC 
-    # Add battery column back in
-    df2['battery_V'] = df['battery_V']
     
-    # Ensure timestamps include a timezone offset instead of just 'UTC'
-    # If not, you'll need to preprocess them to include a proper offset (e.g., replace 'UTC' with '+0000')
-    df2['timestamp_UTC'] = pd.to_datetime(df2['timestamp_UTC'], format='%Y-%m-%d %H:%M:%S%z')
-    
-    # Convert to Pacific Time
-    pacific = pytz.timezone('US/Pacific')
-    df2['timestamp_UTC'] = df2['timestamp_UTC'].dt.tz_convert(pacific)
+    if shef_toggle == True and cdec != None:
+        # convert files to shef - must be done outside since the other files are in UTC 
+        # Add battery column back in
+        df2['battery_V'] = df['battery_V']
+        
+        # Ensure timestamps include a timezone offset instead of just 'UTC'
+        # If not, you'll need to preprocess them to include a proper offset (e.g., replace 'UTC' with '+0000')
+        df2['timestamp_UTC'] = pd.to_datetime(df2['timestamp_UTC'], format='%Y-%m-%d %H:%M:%S%z')
+        
+        # Convert to Pacific Time
+        pacific = pytz.timezone('US/Pacific')
+        df2['timestamp_UTC'] = df2['timestamp_UTC'].dt.tz_convert(pacific)
 
-    # Group data by date
-    grouped = df2.groupby([df2['timestamp_UTC'].dt.year, 
-                           df2['timestamp_UTC'].dt.month.apply(lambda x: f'{x:02d}'), 
-                           df2['timestamp_UTC'].dt.day.apply(lambda x: f'{x:02d}'),
-                           df2['timestamp_UTC'].dt.hour.apply(lambda x: f'{x:02d}')])
+        # Group data by date
+        grouped = df2.groupby([df2['timestamp_UTC'].dt.year, 
+                            df2['timestamp_UTC'].dt.month.apply(lambda x: f'{x:02d}'), 
+                            df2['timestamp_UTC'].dt.day.apply(lambda x: f'{x:02d}'),
+                            df2['timestamp_UTC'].dt.hour.apply(lambda x: f'{x:02d}')])
 
-    for (year, month, day, hour), group in grouped:
-        #SHEF Hourly Output
-        shef_path = Path(base_path if base_path else f'./') / site_name / 'SHEF_Output' / str(year) / str(month) / str(day)
+        for (year, month, day, hour), group in grouped:
+            #SHEF Hourly Output
+            shef_path = Path(base_path if base_path else f'./') / site_name / 'SHEF_Output' / str(year) / str(month) / str(day)
+            shef_path.mkdir(parents=True, exist_ok=True)
+            # Define the filename for SHEF files
+            shef_file = f"{cdec}_Streamflow_SHEF_{year}{month}{day}{hour}.txt"
+
+            # Full path for the file to be saved
+            shef_file_path = shef_path / shef_file
+            
+            # Determine the file mode: 'a' to append if the file exists, 'w' to write otherwise
+            file_mode = 'a' if shef_file_path.exists() else 'w'
+
+            # Open the file to write SHEF data
+            with shef_file_path.open(mode=file_mode) as file:
+                for _, row in group.iterrows():
+                    # Format the timestamp in SHEF format
+                    timestamp_shef = row['timestamp_UTC'].strftime('%Y%m%d%H%M')
+                    # Write stage and discharge lines in SHEF format
+                    """
+                    The .A format is designed for the transmission of one or more hydrometeorological parameters observed at various times for a single station.
+                    .A is the format used
+                    P indicates Pacific time
+                    DH = hour of day and also include minute value e.g. for 21:15 will be written as 2115
+                    HGI = river stage (feet)
+                    QRI = discharge (cubic feet per second)
+                    """
+                    # Write a shef line with the stage value
+                    data_line = f".A {cdec} {timestamp_shef[:8]} P DH{timestamp_shef[8:]} /HGI {format_shef_value(row['water_level_ft'])}"
+                    # If the rating_cuve_exists, include the discharge in the shef code.
+                    if rating_curve_exists:
+                        data_line = data_line + f"/QRI {format_shef_value(row['discharge_cfs'])}"
+                    # Include the water temperature (TWI for Fahrenheit, instantaneous)
+                    data_line = data_line + f"/TWI {format_shef_value(row['water_temperature_Fahrenheit'])}"
+                    # Include the barometric pressure (PAI in inHg, instantaneous).
+                    data_line = data_line + f"/PAI {format_shef_value(row['barometric_pressure_psi']*2.03602)}"
+                    # Include the battery data (VBI for battery voltage in Volts, instantaneous)
+                    data_line = data_line + f"/VBI {format_shef_value(row['battery_V'])}"
+                    
+
+                    # Write to the file
+                    file.write(data_line + '\n')
+                    os.chmod(shef_file_path, 0o774)
+            
+        #SHEF output - append all new data to one file
+        shef_path = Path(base_path if base_path else f'./') / site_name / 'SHEF_Output'
         shef_path.mkdir(parents=True, exist_ok=True)
         # Define the filename for SHEF files
-        shef_file = f"{cdec}_Streamflow_SHEF_{year}{month}{day}{hour}.txt"
+        shef_file = f"{cdec}_Streamflow_SHEF_latest.txt"
 
         # Full path for the file to be saved
         shef_file_path = shef_path / shef_file
         
         # Determine the file mode: 'a' to append if the file exists, 'w' to write otherwise
         file_mode = 'a' if shef_file_path.exists() else 'w'
-
+        # check if there is any timestamp at the start of the new hour (00 minute)
+        #overwrite = df2['timestamp_UTC'].dt.minute.isin([0]).any()
+        #file_mode = 'w' if overwrite else 'a'
+            
         # Open the file to write SHEF data
         with shef_file_path.open(mode=file_mode) as file:
-            for _, row in group.iterrows():
+            for _, row in df2.iterrows():
                 # Format the timestamp in SHEF format
                 timestamp_shef = row['timestamp_UTC'].strftime('%Y%m%d%H%M')
                 # Write stage and discharge lines in SHEF format
@@ -432,62 +519,16 @@ def parse_stream(hobolink_data, site_name, cdec, base_path=None, append_to_singl
                 # If the rating_cuve_exists, include the discharge in the shef code.
                 if rating_curve_exists:
                     data_line = data_line + f"/QRI {format_shef_value(row['discharge_cfs'])}"
-                # Include the water temperature (TWI for Fahrenheit, instantaneous)
+                # Include the water temperature (TW for Fahrenheit, TU for Celcius)
                 data_line = data_line + f"/TWI {format_shef_value(row['water_temperature_Fahrenheit'])}"
                 # Include the barometric pressure (PAI in inHg, instantaneous).
                 data_line = data_line + f"/PAI {format_shef_value(row['barometric_pressure_psi']*2.03602)}"
                 # Include the battery data (VBI for battery voltage in Volts, instantaneous)
                 data_line = data_line + f"/VBI {format_shef_value(row['battery_V'])}"
-                
 
                 # Write to the file
                 file.write(data_line + '\n')
                 os.chmod(shef_file_path, 0o775)
-        
-    #SHEF output - append all new data to one file
-    shef_path = Path(base_path if base_path else f'./') / site_name / 'SHEF_Output'
-    shef_path.mkdir(parents=True, exist_ok=True)
-    # Define the filename for SHEF files
-    shef_file = f"{cdec}_Streamflow_SHEF_latest.txt"
-
-    # Full path for the file to be saved
-    shef_file_path = shef_path / shef_file
-    
-    # Determine the file mode: 'a' to append if the file exists, 'w' to write otherwise
-    file_mode = 'a' if shef_file_path.exists() else 'w'
-    # check if there is any timestamp at the start of the new hour (00 minute)
-    #overwrite = df2['timestamp_UTC'].dt.minute.isin([0]).any()
-    #file_mode = 'w' if overwrite else 'a'
-        
-    # Open the file to write SHEF data
-    with shef_file_path.open(mode=file_mode) as file:
-        for _, row in df2.iterrows():
-            # Format the timestamp in SHEF format
-            timestamp_shef = row['timestamp_UTC'].strftime('%Y%m%d%H%M')
-            # Write stage and discharge lines in SHEF format
-            """
-            The .A format is designed for the transmission of one or more hydrometeorological parameters observed at various times for a single station.
-            .A is the format used
-            P indicates Pacific time
-            DH = hour of day and also include minute value e.g. for 21:15 will be written as 2115
-            HGI = river stage (feet)
-            QRI = discharge (cubic feet per second)
-            """
-            # Write a shef line with the stage value
-            data_line = f".A {cdec} {timestamp_shef[:8]} P DH{timestamp_shef[8:]} /HGI {format_shef_value(row['water_level_ft'])}"
-            # If the rating_cuve_exists, include the discharge in the shef code.
-            if rating_curve_exists:
-                data_line = data_line + f"/QRI {format_shef_value(row['discharge_cfs'])}"
-            # Include the water temperature (TW for Fahrenheit, TU for Celcius)
-            data_line = data_line + f"/TWI {format_shef_value(row['water_temperature_Fahrenheit'])}"
-            # Include the barometric pressure (PAI in inHg, instantaneous).
-            data_line = data_line + f"/PAI {format_shef_value(row['barometric_pressure_psi']*2.03602)}"
-            # Include the battery data (VBI for battery voltage in Volts, instantaneous)
-            data_line = data_line + f"/VBI {format_shef_value(row['battery_V'])}"
-
-            # Write to the file
-            file.write(data_line + '\n')
-            os.chmod(shef_file_path, 0o775)
 
     # Return both the number of records processed and the list of filenames
     return df2.shape[0] #, filename_list
@@ -637,35 +678,40 @@ def backfill_stream(hobolink_data,site_name, base_path=None, append_to_single_fi
     return df2.shape[0]
 
 
-# function to parse the data from the HOBOlink API
+# Function to parse the data from the HOBOlink API
 def parse_precip(hobolink_data, site_name, base_path=None, append_to_single_file=False):
     # Parse data for PrecipMet Tipping Bucket
     df = pd.DataFrame.from_dict(hobolink_data["observation_list"])
-    # Parse data for PrecipMet Tipping Bucket
+
+    # Filter for precipitation data
     precipitation_pulses = df.loc[df['sensor_measurement_type'] == 'Precipitation']
     if precipitation_pulses.empty:
-        # If no water pressure data is found, set default values
         precipitation_mm = np.nan
         timestamp = np.nan
     else:
         precipitation_mm = precipitation_pulses['scaled_value'].round(2).reset_index(drop=True)
-        # Date timestamps for data - each 'sensor_measurement_type' provides a 'timestamp' but only uses one value per timestamp so we drop duplicates   
         timestamp = precipitation_pulses['timestamp'].iloc[:].reset_index(drop=True)
 
     # Create a new dataframe with the parsed data
-    df2 = pd.DataFrame({'timestamp_UTC': timestamp,
-                        'precipitation_mm': precipitation_mm
-                        })
+    df2 = pd.DataFrame({'timestamp_UTC': timestamp, 'precipitation_mm': precipitation_mm})
 
     df2['timestamp_UTC'] = pd.to_datetime(df2['timestamp_UTC'], format='%Y-%m-%d %H:%M:%S%z')
 
     # Calculate accumulated precipitation
     df2['accumulated_precipitation_mm'] = df2['precipitation_mm'].cumsum()
-    
+
+    # Set up base master path
+    master_path = Path(base_path if base_path else './') / site_name
+
+    # Ensure Raw directory exists
+    raw_path = master_path / "Raw"
+    raw_path.mkdir(parents=True, exist_ok=True)
+
+    # Master table raw file path
+    master_table_raw = raw_path / f"{site_name}_MasterTable_Raw.csv"
+
     # Read the site.csv file to get the last recorded accumulated value
-    site_csv_path = Path(base_path if base_path else f'./{site_name}.csv')
-    filename = f"{site_name}.csv"
-    site_csv_path = site_csv_path / filename
+    site_csv_path = raw_path / f"{site_name}.csv"
     if site_csv_path.exists():
         with open(site_csv_path, 'r') as file:
             reader = csv.DictReader(file)
@@ -675,18 +721,15 @@ def parse_precip(hobolink_data, site_name, base_path=None, append_to_single_file
             if last_record is not None:
                 last_accumulated_precip = float(last_record['accumulated_precipitation_mm'])
                 df2['accumulated_precipitation_mm'] += last_accumulated_precip
-    
-    # Identify the index where Timestamp reaches October 1st, 00:00:00
+
+    # Identify the index where Timestamp reaches October 1st, 00:00:00 (New Water Year)
     october_indices = df2[df2['timestamp_UTC'].dt.month == 10].index
     if not october_indices.empty:
         october_index = october_indices[0]
     else:
-        # Handle the case where there are no timestamps for October
-        # For example, set october_index to None or handle the situation in an appropriate way
         october_index = None
 
     if october_index is not None:
-        # Reset accumulated precipitation to 0 for each water year
         df2['Water_Year'] = (df2['timestamp_UTC'].dt.year + (df2['timestamp_UTC'].dt.month >= 10)).astype(str)
         df2.loc[october_index:, 'accumulated_precipitation_mm'] -= df2.loc[october_index, 'accumulated_precipitation_mm']
         precip_at_reset = df2.loc[october_index, 'precipitation_mm']
@@ -697,47 +740,60 @@ def parse_precip(hobolink_data, site_name, base_path=None, append_to_single_file
             df2.loc[october_index + 1, 'accumulated_precipitation_mm'] += precip_at_reset
 
     df2['accumulated_precipitation_mm'] = df2['accumulated_precipitation_mm'].round(2)
-    
-    # Group data by date
-    grouped = df2.groupby([df2['timestamp_UTC'].dt.year, 
-                           df2['timestamp_UTC'].dt.month.apply(lambda x: f'{x:02d}'), 
-                           df2['timestamp_UTC'].dt.day.apply(lambda x: f'{x:02d}'),
-                           df2['timestamp_UTC'].dt.hour.apply(lambda x: f'{x:02d}00')])
 
-    filename_list = []  # Initialize the list to record filenames
+    # Group data by date
+    grouped = df2.groupby([
+        df2['timestamp_UTC'].dt.year, 
+        df2['timestamp_UTC'].dt.month.apply(lambda x: f'{x:02d}'), 
+        df2['timestamp_UTC'].dt.day.apply(lambda x: f'{x:02d}')
+    ])
+
+    # Append to Master Table Raw
+    df2.drop(columns=['Water_Year'], inplace=True, errors='ignore')
+    df2.to_csv(master_table_raw, mode='a' if master_table_raw.exists() else 'w', 
+            index=False, header=not master_table_raw.exists(), 
+            escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
+
+    # Set file permissions for Master Table Raw (User: RW, Group: R, Others: R) = `0o644`
+    os.chmod(master_table_raw, 0o644)
 
     if append_to_single_file:
         # Define the path for the long-running file
-        directory_path = Path(base_path if base_path else './')
-        directory_path.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
-        filename = f"{site_name}.csv"
-        filepath = directory_path / filename
+        site_csv_path = raw_path / f"{site_name}.csv"
         df2['timestamp_UTC'] = df2['timestamp_UTC'].dt.strftime('%Y-%m-%d %H:%M:%S') + 'Z'
-        mode = 'a' if filepath.exists() else 'w'
-        header = not filepath.exists()
+        mode = 'a' if site_csv_path.exists() else 'w'
+        header = not site_csv_path.exists()
         
         # Append data to the single file
-        df2.to_csv(filepath, mode=mode, index=False, header=header, escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
-        # Set the file permissions to 0775
-        os.chmod(filepath, 0o775)
-        filename_list.append(filepath.name)  # Record the filename
-    else:
-        for (year, month, day, hour), group in grouped:
-            directory_path = Path(base_path / site_name / 'RawDaily' if base_path else f'./{site_name}/RawDaily') / str(year) / str(month)
-            directory_path.mkdir(parents=True, exist_ok=True)
-            
-            filename = f"{site_name}_{year}-{month}-{day}.csv"
-            filepath = directory_path / filename
-            group['timestamp_UTC'] = group['timestamp_UTC'].dt.strftime('%Y-%m-%d %H:%M:%S') + 'Z'
-            mode = 'a' if filepath.exists() else 'w'
-            header = not filepath.exists()
-            
-            group.to_csv(filepath, mode=mode, index=False, header=header, escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
-            os.chmod(filepath, 0o775)
-            filename_list.append(filepath.name)  # Record the filename
+        df2.to_csv(site_csv_path, mode=mode, index=False, header=header, escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
 
-    # Return both the number of records processed and the list of filenames
-    return df2.shape[0], filename_list
+        # Set the file permissions to `0o644`
+        os.chmod(site_csv_path, 0o644)
+
+    else:
+        for (year, month, day), group in grouped:
+            # **Raw Daily Directory**
+            raw_daily_path = raw_path / "Raw_Daily" / str(year) / str(month)
+            raw_daily_path.mkdir(parents=True, exist_ok=True)
+
+            # **Raw Daily File**
+            raw_daily_file = raw_daily_path / f"{site_name}_{year}-{month}-{day}.csv"
+
+            # Format timestamp for storage
+            group['timestamp_UTC'] = group['timestamp_UTC'].dt.strftime('%Y-%m-%d %H:%M:%S') + 'Z'
+            mode_daily = 'a' if raw_daily_file.exists() else 'w'
+            header_daily = not raw_daily_file.exists()
+
+            # Write to Raw Daily File
+            group.drop(columns=['Water_Year'], inplace=True, errors='ignore')
+            group.to_csv(raw_daily_file, mode=mode_daily, index=False, header=header_daily,
+                        escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
+
+            # Set file permissions for Raw Daily (User: RW, Group: R, Others: R) = `0o644`
+            os.chmod(raw_daily_file, 0o644)
+
+    # Return only the number of records processed
+    return df2.shape[0]
 
 def backfill_precip(hobolink_data,filename):
     # Parse data for PrecipMet Tipping Bucket
