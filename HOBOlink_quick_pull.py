@@ -17,20 +17,17 @@ base_dir = "/data/CW3E_data/CW3E_Streamflow_Archive/"
 # Note base_dir will need to be indicated in the parse fucntion - the default is None (data will be stored in the same place as where the script is running)
 #base_dir.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
 
+# SHEF Output Toggle
+shef = True
+
 # HOBOlink account and device info
-user_id = os.environ.get("USER_ID") # user ID found on HOBOlink
 logger_id='22050044' # update this to the correct Logger SN - can be found on HOBOlink
 site_id='WHT' # Change this to the appropriate site ID
 cdec = 'WIC' # Change this to the appropriate cdec ID
 site_type = 'S' #S = streams and P = Precip
 
-#HOBOlink authentication server
-# url provided by HOBOlink Web Services V3 Developer's Guide
-auth_server_url = "https://webservice.hobolink.com/ws/auth/token"
-
-# credentials provided by Onset Tech support
-client_id = os.environ.get("CLIENT_ID")
-client_secret = os.environ.get("CLIENT_SECRET")
+# HOBOlink API Token
+token = os.environ.get("TOKEN") # user ID found on HOBOlink
 
 #-------------------------------------------------------------------------------------------------------------------------------------
 # Specify the start and end time for data to be pulled
@@ -73,15 +70,13 @@ for i in range(len(url_intervals)):
     print("pulling data chunk for the following period:")
     print(timestamp_intervals[i][0].strftime("%Y-%m-%d %H:%M:%SZ"), "-", timestamp_intervals[i][1].strftime("%Y-%m-%d %H:%M:%SZ"))
     # HOBOlink url to get data from file endpoints
-    hobolink_api_url = "https://webservice.hobolink.com/ws/data/file/JSON/user/" + user_id + "?loggers=" + logger_id + url_intervals[i]
+    hobolink_api_url = "https://api.hobolink.licor.cloud/v1/data?loggers=" + logger_id + url_intervals[i]
     while True:
-        # Obtain a token before calling the HOBOlink API for the first time
-        token = get_new_token(auth_server_url, client_id, client_secret)
-        #  Use the API with the newly acquired token
-        api_call_headers = {'Authorization': 'Bearer ' + token} # HTTP Authentication required for HOBOlink
+        #  send data request using token
+        api_call_headers = {
+            'accept': 'application/json',
+            'Authorization': 'Bearer ' + token} # HTTP Authentication required for HOBOlink
         api_call_response = requests.get(hobolink_api_url, headers=api_call_headers, verify=True) # requests a representation of the specified resource
-        # Create a new token incase it expires
-        # Token from Hobolink will expire after 10 minutes, or if another one is expired
         if api_call_response.status_code == 200: 
             # Convert data to dict
             data = api_call_response.json() # data from HOBOlink will be in JSON JavaScript Object Notation
@@ -90,12 +85,10 @@ for i in range(len(url_intervals)):
             
             
             if len(data["observation_list"]) > 0 :
-                data_int = parse_stream(data, site_id, cdec, base_path=base_dir, append_to_single_file=False)
+                data_int = parse_stream(data, site_id, cdec, base_path=base_dir, append_to_single_file=False, shef_toggle=shef)
             elif len(data["observation_list"]) == 0:
                 print('No data available.')
             break
-        elif api_call_response.status_code == 401: #http 401 code will appear if token is expired
-            token = get_new_token(auth_server_url, client_id, client_secret)
         elif api_call_response.status_code == 400 or api_call_response.status_code == 500 or api_call_response.status_code == 509: 
             # Failures have occured - Record error code and error description in log file
             data = api_call_response.json() # data from HOBOlink will be in JSON JavaScript Object Notation
@@ -140,16 +133,14 @@ if nan_check != "no":
     for url in url_intervals:
         print("Backfilling data.")
         # HOBOlink url to get data from file endpoints
-        hobolink_api_url = "https://webservice.hobolink.com/ws/data/file/JSON/user/" + user_id + "?loggers=" + logger_id + url
-
+        hobolink_api_url = "https://api.hobolink.licor.cloud/v1/data?loggers=" + logger_id + url_intervals[i]
+    
         while True:
-            # Obtain a token before calling the HOBOlink API for the first time
-            token = get_new_token(auth_server_url, client_id, client_secret)
-            #  Use the API with the newly acquired token
-            api_call_headers = {'Authorization': 'Bearer ' + token} # HTTP Authentication required for HOBOlink
+            #  send data request using token
+            api_call_headers = {
+                'accept': 'application/json',
+                'Authorization': 'Bearer ' + token} # HTTP Authentication required for HOBOlink
             api_call_response = requests.get(hobolink_api_url, headers=api_call_headers, verify=True) # requests a representation of the specified resource
-            # Create a new token incase it expires
-            # Token from Hobolink will expire after 10 minutes, or if another one is expired
             if api_call_response.status_code == 200: 
                 # Convert data to dict
                 data = api_call_response.json() # data from HOBOlink will be in JSON JavaScript Object Notation
@@ -160,8 +151,6 @@ if nan_check != "no":
                 elif len(data["observation_list"]) == 0:
                     print('No data available.')
                 break
-            elif api_call_response.status_code == 401: #http 401 code will appear if token is expired
-                token = get_new_token(auth_server_url, client_id, client_secret)
             elif api_call_response.status_code == 400 or api_call_response.status_code == 500 or api_call_response.status_code == 509: 
                 # Failures have occured - Record error code and error description in log file
                 data = api_call_response.json() # data from HOBOlink will be in JSON JavaScript Object Notation
