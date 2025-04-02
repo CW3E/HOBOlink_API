@@ -59,9 +59,9 @@ for site_id, row in df_sites.iterrows():
         
         # file name of long running file
         # need to provide path to where this is located at to check timestamp of last successful log
-        file_csv = site_id + "_MasterTable.csv"
+        file_csv = site_id + "_MasterTable_Raw.csv"
         # full path to the site csv file
-        file_csv_path = base_dir_path / site_id / file_csv
+        file_csv_path = base_dir_path / site_id / "Raw" / file_csv
     
         # check if file exists
         file_exists = os.path.isfile(file_csv_path)
