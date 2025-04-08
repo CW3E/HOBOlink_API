@@ -164,57 +164,81 @@ def parse_stream(hobolink_data, site_name, cdec=None, base_path=None, shef_toggl
 
     # Create DataFrame
     df = pd.DataFrame(rows)
-
-    # Determine if all non-battery units are SI or US
-    if tracked_units.issubset(si_units):
-        unit_type = "SI"
-    elif tracked_units.issubset(us_units):
-        unit_type = "US"
-    else:
-        unit_type = "Mixed"
     
     # If there's no values, or there were only Battery V measurements, return
     if df.empty:
         print('No new data found.')
         return df.shape[0]
     
-    # Handle duplicate timestamps by grouping and aggregating
     df = df.groupby("timestamp", as_index=False).first()
-    
-    # Remove rows that are just battery data
     df = df[~((df["Battery"].notna()) & (df.drop(columns=["timestamp", "Battery"]).isna().all(axis=1)))]
-    
-    # remove any rows with nan values
-    # uncomment this if we don't want any data from a timestamp when one of the values is missing.
-    df = df.dropna()
-    
-    # reset index
-    df = df.reset_index(drop=True)
-    
-    #convert all measurements to either SI or US units
-    if unit_type == "US":
-        # convert all US units to SI and add to dataframe
-        if 'Water Pressure us' not in df:
-            df['Water Pressure us'] = df['Barometric Pressure us'] + df['Diff Pressure us']
-        df['Water Pressure si'] = df['Water Pressure us'] * 6.89476
-        df['Diff Pressure si'] = df['Diff Pressure us'] * 6.89476
-        df['Barometric Pressure si'] = df['Barometric Pressure us'] * 6.89476
-        df['Water Temperature si'] = (df['Water Temperature us'] - 32) * (5/9)
-        df['Water Level si'] = df['Water Level us'] * 0.3048
-    elif unit_type == "SI":
-        # convert all SI units to US and add to dataframe
-        if 'Water Pressure si' not in df:
-            df['Water Pressure si'] = df['Barometric Pressure si'] + df['Diff Pressure si']
-        df['Water Pressure us'] = df['Water Pressure si'] / 6.89476
-        df['Diff Pressure us'] = df['Diff Pressure si'] / 6.89476
-        df['Barometric Pressure us'] = df['Barometric Pressure si'] / 6.89476
-        df['Water Temperature us'] = df['Water Temperature si'] * (9/5) + 32
-        df['Water Level us'] = df['Water Level si'] * 3.28084
-    else:
-        print("US and SI units are mixed")
 
+    # Safely convert columns to numeric without triggering deprecation warnings
+    for col in df.columns:
+        try:
+            df[col] = pd.to_numeric(df[col])
+        except Exception:
+            pass
+
+    sensor_fields = {
+        'Diff Pressure': ('psi', 'kPa', 6.89476),
+        'Barometric Pressure': ('psi', 'kPa', 6.89476),
+        'Water Level': ('feet', 'meters', 0.3048),
+        'Water Temperature': ('F', 'C', None),
+    }
+
+    for sensor, (us_unit, si_unit, factor) in sensor_fields.items():
+        us_col = f"{sensor} us"
+        si_col = f"{sensor} si"
+
+        # Ensure numeric with NaNs where conversion fails
+        if us_col in df.columns:
+            df[us_col] = pd.to_numeric(df[us_col], errors='coerce')
+        if si_col in df.columns:
+            df[si_col] = pd.to_numeric(df[si_col], errors='coerce')
+
+        if sensor == "Water Temperature":
+            # Fill missing SI from US
+            if us_col in df.columns and si_col in df.columns:
+                df.loc[df[si_col].isna() & df[us_col].notna(), si_col] = (
+                    (df[us_col] - 32) * 5 / 9
+                )
+                df.loc[df[us_col].isna() & df[si_col].notna(), us_col] = (
+                    df[si_col] * 9 / 5 + 32
+                )
+            elif us_col in df.columns:
+                df[si_col] = (df[us_col] - 32) * 5 / 9
+            elif si_col in df.columns:
+                df[us_col] = df[si_col] * 9 / 5 + 32
+        else:
+            # Fill missing SI from US
+            if us_col in df.columns and si_col in df.columns:
+                df.loc[df[si_col].isna() & df[us_col].notna(), si_col] = df[us_col] * factor
+                df.loc[df[us_col].isna() & df[si_col].notna(), us_col] = df[si_col] / factor
+            elif us_col in df.columns:
+                df[si_col] = df[us_col] * factor
+            elif si_col in df.columns:
+                df[us_col] = df[si_col] / factor
+
+
+    # Ensure base pressures are numeric
+    for col in ['Barometric Pressure si', 'Diff Pressure si', 'Barometric Pressure us', 'Diff Pressure us']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # Calculate Water Pressure in missing units
+    if 'Barometric Pressure si' in df.columns and 'Diff Pressure si' in df.columns:
+        df['Water Pressure si'] = df['Barometric Pressure si'] + df['Diff Pressure si']
+        df['Water Pressure us'] = df['Water Pressure si'] / 6.89476
+    elif 'Barometric Pressure us' in df.columns and 'Diff Pressure us' in df.columns:
+        df['Water Pressure us'] = df['Barometric Pressure us'] + df['Diff Pressure us']
+        df['Water Pressure si'] = df['Water Pressure us'] * 6.89476
+
+
+    df = df.dropna().reset_index(drop=True)
     # Apply rounding and formatting to all numeric values
-    df = df.applymap(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
+    numeric_cols = df.select_dtypes(include='number').columns
+    df[numeric_cols] = df[numeric_cols].round(2)
 
     # Rename columns to match MasterTable column names
     new_column_names = {'timestamp': 'timestamp_UTC',
@@ -365,15 +389,15 @@ def parse_stream(hobolink_data, site_name, cdec=None, base_path=None, shef_toggl
                             escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
 
     # Set file permissions for Raw (User: RW, Group: R, Others: R) = `0o644`
-    os.chmod(master_table_raw, 0o744)
+    os.chmod(master_table_raw, 0o644)
 
     # Write to Processed CSV (all columns)
     df2.to_csv(master_table_processed, mode='a' if master_table_processed.exists() else 'w', 
             index=False, header=not master_table_processed.exists(), 
             escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
 
-    # Set file permissions for Processed (User: RW, Group: RWX, Others: R) = `0o744`
-    os.chmod(master_table_processed, 0o774)
+    # Set file permissions for Processed (User: RW, Group: RW, Others: R) = `0o664`
+    os.chmod(master_table_processed, 0o664)
 
     # Convert timestamp back for grouping
     df2['timestamp_UTC'] = pd.to_datetime(df2['timestamp_UTC'], format='%Y-%m-%d %H:%M:%S%z')
@@ -402,8 +426,8 @@ def parse_stream(hobolink_data, site_name, cdec=None, base_path=None, shef_toggl
                                 index=False, header=not raw_daily_file.exists(),
                                 escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
 
-        # Set file permissions for Raw Daily (User: RWX, Group: R, Others: R) = `0o744`
-        os.chmod(raw_daily_file, 0o744)
+        # Set file permissions for Raw Daily (User: RW, Group: R, Others: R) = `0o644`
+        os.chmod(raw_daily_file, 0o644)
 
         # **Processed Daily**
         processed_daily_path = processed_path / "Processed_Daily" / str(year) / str(month)
@@ -415,8 +439,9 @@ def parse_stream(hobolink_data, site_name, cdec=None, base_path=None, shef_toggl
                     index=False, header=not processed_daily_file.exists(),
                     escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
 
-    # Set file permissions for Processed Daily (User: RWX, Group: R, Others: R) = `0o744`
-    os.chmod(processed_daily_file, 0o774)            
+        # Set file permissions for Processed Daily (User: RW, Group: RW, Others: R) = `0o664`
+        os.chmod(processed_daily_file, 0o664)            
+       
     
     #------------------------------------------------------------------------------
     
@@ -481,7 +506,7 @@ def parse_stream(hobolink_data, site_name, cdec=None, base_path=None, shef_toggl
 
                     # Write to the file
                     file.write(data_line + '\n')
-                    os.chmod(shef_file_path, 0o774)
+                    os.chmod(shef_file_path, 0o664)
             
         #SHEF output - append all new data to one file
         shef_path = Path(base_path if base_path else f'./') / site_name / 'SHEF_Output'
@@ -1016,57 +1041,81 @@ def parse_stream_backfill(hobolink_data, site_name, cdec=None, base_path=None, s
 
     # Create DataFrame
     df = pd.DataFrame(rows)
-
-    # Determine if all non-battery units are SI or US
-    if tracked_units.issubset(si_units):
-        unit_type = "SI"
-    elif tracked_units.issubset(us_units):
-        unit_type = "US"
-    else:
-        unit_type = "Mixed"
     
     # If there's no values, or there were only Battery V measurements, return
     if df.empty:
         print('No new data found.')
         return df.shape[0]
     
-    # Handle duplicate timestamps by grouping and aggregating
     df = df.groupby("timestamp", as_index=False).first()
-    
-    # Remove rows that are just battery data
     df = df[~((df["Battery"].notna()) & (df.drop(columns=["timestamp", "Battery"]).isna().all(axis=1)))]
-    
-    # remove any rows with nan values
-    # uncomment this if we don't want any data from a timestamp when one of the values is missing.
-    df = df.dropna()
-    
-    # reset index
-    df = df.reset_index(drop=True)
-    
-    #convert all measurements to either SI or US units
-    if unit_type == "US":
-        # convert all US units to SI and add to dataframe
-        if 'Water Pressure us' not in df:
-            df['Water Pressure us'] = df['Barometric Pressure us'] + df['Diff Pressure us']
-        df['Water Pressure si'] = df['Water Pressure us'] * 6.89476
-        df['Diff Pressure si'] = df['Diff Pressure us'] * 6.89476
-        df['Barometric Pressure si'] = df['Barometric Pressure us'] * 6.89476
-        df['Water Temperature si'] = (df['Water Temperature us'] - 32) * (5/9)
-        df['Water Level si'] = df['Water Level us'] * 0.3048
-    elif unit_type == "SI":
-        # convert all SI units to US and add to dataframe
-        if 'Water Pressure si' not in df:
-            df['Water Pressure si'] = df['Barometric Pressure si'] + df['Diff Pressure si']
-        df['Water Pressure us'] = df['Water Pressure si'] / 6.89476
-        df['Diff Pressure us'] = df['Diff Pressure si'] / 6.89476
-        df['Barometric Pressure us'] = df['Barometric Pressure si'] / 6.89476
-        df['Water Temperature us'] = df['Water Temperature si'] * (9/5) + 32
-        df['Water Level us'] = df['Water Level si'] * 3.28084
-    else:
-        print("US and SI units are mixed")
 
+    # Safely convert columns to numeric without triggering deprecation warnings
+    for col in df.columns:
+        try:
+            df[col] = pd.to_numeric(df[col])
+        except Exception:
+            pass
+
+    sensor_fields = {
+        'Diff Pressure': ('psi', 'kPa', 6.89476),
+        'Barometric Pressure': ('psi', 'kPa', 6.89476),
+        'Water Level': ('feet', 'meters', 0.3048),
+        'Water Temperature': ('F', 'C', None),
+    }
+
+    for sensor, (us_unit, si_unit, factor) in sensor_fields.items():
+        us_col = f"{sensor} us"
+        si_col = f"{sensor} si"
+
+        # Ensure numeric with NaNs where conversion fails
+        if us_col in df.columns:
+            df[us_col] = pd.to_numeric(df[us_col], errors='coerce')
+        if si_col in df.columns:
+            df[si_col] = pd.to_numeric(df[si_col], errors='coerce')
+
+        if sensor == "Water Temperature":
+            # Fill missing SI from US
+            if us_col in df.columns and si_col in df.columns:
+                df.loc[df[si_col].isna() & df[us_col].notna(), si_col] = (
+                    (df[us_col] - 32) * 5 / 9
+                )
+                df.loc[df[us_col].isna() & df[si_col].notna(), us_col] = (
+                    df[si_col] * 9 / 5 + 32
+                )
+            elif us_col in df.columns:
+                df[si_col] = (df[us_col] - 32) * 5 / 9
+            elif si_col in df.columns:
+                df[us_col] = df[si_col] * 9 / 5 + 32
+        else:
+            # Fill missing SI from US
+            if us_col in df.columns and si_col in df.columns:
+                df.loc[df[si_col].isna() & df[us_col].notna(), si_col] = df[us_col] * factor
+                df.loc[df[us_col].isna() & df[si_col].notna(), us_col] = df[si_col] / factor
+            elif us_col in df.columns:
+                df[si_col] = df[us_col] * factor
+            elif si_col in df.columns:
+                df[us_col] = df[si_col] / factor
+
+
+    # Ensure base pressures are numeric
+    for col in ['Barometric Pressure si', 'Diff Pressure si', 'Barometric Pressure us', 'Diff Pressure us']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # Calculate Water Pressure in missing units
+    if 'Barometric Pressure si' in df.columns and 'Diff Pressure si' in df.columns:
+        df['Water Pressure si'] = df['Barometric Pressure si'] + df['Diff Pressure si']
+        df['Water Pressure us'] = df['Water Pressure si'] / 6.89476
+    elif 'Barometric Pressure us' in df.columns and 'Diff Pressure us' in df.columns:
+        df['Water Pressure us'] = df['Barometric Pressure us'] + df['Diff Pressure us']
+        df['Water Pressure si'] = df['Water Pressure us'] * 6.89476
+
+
+    df = df.dropna().reset_index(drop=True)
     # Apply rounding and formatting to all numeric values
-    df = df.applymap(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
+    numeric_cols = df.select_dtypes(include='number').columns
+    df[numeric_cols] = df[numeric_cols].round(2)
 
     # Rename columns to match MasterTable column names
     new_column_names = {'timestamp': 'timestamp_UTC',
@@ -1217,15 +1266,15 @@ def parse_stream_backfill(hobolink_data, site_name, cdec=None, base_path=None, s
                             escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
 
     # Set file permissions for Raw (User: RW, Group: R, Others: R) = `0o644`
-    os.chmod(master_table_raw, 0o744)
+    os.chmod(master_table_raw, 0o644)
 
     # Write to Processed CSV (all columns)
     df2.to_csv(master_table_processed, mode='a' if master_table_processed.exists() else 'w', 
             index=False, header=not master_table_processed.exists(), 
             escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
 
-    # Set file permissions for Processed (User: RW, Group: RWX, Others: R) = `0o744`
-    os.chmod(master_table_processed, 0o774)
+    # Set file permissions for Processed (User: RW, Group: RW, Others: R) = `0o664`
+    os.chmod(master_table_processed, 0o664)
 
     # Convert timestamp back for grouping
     df2['timestamp_UTC'] = pd.to_datetime(df2['timestamp_UTC'], format='%Y-%m-%d %H:%M:%S%z')
@@ -1254,8 +1303,8 @@ def parse_stream_backfill(hobolink_data, site_name, cdec=None, base_path=None, s
                                 index=False, header=not raw_daily_file.exists(),
                                 escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
 
-        # Set file permissions for Raw Daily (User: RWX, Group: R, Others: R) = `0o744`
-        os.chmod(raw_daily_file, 0o744)
+        # Set file permissions for Raw Daily (User: RW, Group: R, Others: R) = `0o644`
+        os.chmod(raw_daily_file, 0o644)
 
         # **Processed Daily**
         processed_daily_path = processed_path / "Processed_Daily" / str(year) / str(month)
@@ -1267,8 +1316,8 @@ def parse_stream_backfill(hobolink_data, site_name, cdec=None, base_path=None, s
                     index=False, header=not processed_daily_file.exists(),
                     escapechar='\\', quoting=csv.QUOTE_NONNUMERIC)
 
-    # Set file permissions for Processed Daily (User: RWX, Group: R, Others: R) = `0o744`
-    os.chmod(processed_daily_file, 0o774)            
+        # Set file permissions for Processed Daily (User: RW, Group: RW, Others: R) = `0o664`
+        os.chmod(processed_daily_file, 0o664)            
     
     #------------------------------------------------------------------------------
     
@@ -1333,7 +1382,7 @@ def parse_stream_backfill(hobolink_data, site_name, cdec=None, base_path=None, s
 
                     # Write to the file
                     file.write(data_line + '\n')
-                    os.chmod(shef_file_path, 0o774)
+                    os.chmod(shef_file_path, 0o664)
             
         #SHEF output - append all new data to one file
         shef_path = Path(base_path if base_path else f'./') / site_name / 'SHEF_Output'
