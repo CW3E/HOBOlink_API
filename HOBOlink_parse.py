@@ -497,7 +497,7 @@ def parse_stream(hobolink_data, site_name, cdec=None, base_path=None, shef_toggl
                     if rating_curve_exists:
                         data_line = data_line + f"/QRI {format_shef_value(row['discharge_cfs'])}"
                     # Include the water temperature (TWI for Fahrenheit, instantaneous)
-                    data_line = data_line + f"/TWI {format_shef_value(row['water_temperature_Fahrenheit'])}"
+                    data_line = data_line + f"/TWI {format_shef_value(row['water_temperature_F'])}"
                     # Include the barometric pressure (PAI in inHg, instantaneous).
                     data_line = data_line + f"/PAI {format_shef_value(row['barometric_pressure_psi']*2.03602)}"
                     # Include the battery data (VBI for battery voltage in Volts, instantaneous)
@@ -543,7 +543,7 @@ def parse_stream(hobolink_data, site_name, cdec=None, base_path=None, shef_toggl
                 if rating_curve_exists:
                     data_line = data_line + f"/QRI {format_shef_value(row['discharge_cfs'])}"
                 # Include the water temperature (TW for Fahrenheit, TU for Celcius)
-                data_line = data_line + f"/TWI {format_shef_value(row['water_temperature_Fahrenheit'])}"
+                data_line = data_line + f"/TWI {format_shef_value(row['water_temperature_F'])}"
                 # Include the barometric pressure (PAI in inHg, instantaneous).
                 data_line = data_line + f"/PAI {format_shef_value(row['barometric_pressure_psi']*2.03602)}"
                 # Include the battery data (VBI for battery voltage in Volts, instantaneous)
@@ -1373,7 +1373,7 @@ def parse_stream_backfill(hobolink_data, site_name, cdec=None, base_path=None, s
                     if rating_curve_exists:
                         data_line = data_line + f"/QRI {format_shef_value(row['discharge_cfs'])}"
                     # Include the water temperature (TWI for Fahrenheit, instantaneous)
-                    data_line = data_line + f"/TWI {format_shef_value(row['water_temperature_Fahrenheit'])}"
+                    data_line = data_line + f"/TWI {format_shef_value(row['water_temperature_F'])}"
                     # Include the barometric pressure (PAI in inHg, instantaneous).
                     data_line = data_line + f"/PAI {format_shef_value(row['barometric_pressure_psi']*2.03602)}"
                     # Include the battery data (VBI for battery voltage in Volts, instantaneous)
@@ -1421,7 +1421,7 @@ def parse_stream_backfill(hobolink_data, site_name, cdec=None, base_path=None, s
                 if rating_curve_exists:
                     data_line = data_line + f"/QRI {format_shef_value(row['discharge_cfs'])}"
                 # Include the water temperature (TW for Fahrenheit, TU for Celcius)
-                data_line = data_line + f"/TWI {format_shef_value(row['water_temperature_Fahrenheit'])}"
+                data_line = data_line + f"/TWI {format_shef_value(row['water_temperature_F'])}"
                 # Include the barometric pressure (PAI in inHg, instantaneous).
                 data_line = data_line + f"/PAI {format_shef_value(row['barometric_pressure_psi']*2.03602)}"
                 # Include the battery data (VBI for battery voltage in Volts, instantaneous)
