@@ -704,7 +704,7 @@ def backfill_stream(hobolink_data,site_name, base_path=None, append_to_single_fi
 # Function to parse the data from the HOBOlink API
 def parse_precip(hobolink_data, site_name, base_path=None, append_to_single_file=False):
     # Parse data for PrecipMet Tipping Bucket
-    df = pd.DataFrame.from_dict(hobolink_data["observation_list"])
+    df = pd.DataFrame.from_dict(hobolink_data["data"])
 
     # Filter for precipitation data
     precipitation_pulses = df.loc[df['sensor_measurement_type'] == 'Precipitation']
@@ -820,7 +820,7 @@ def parse_precip(hobolink_data, site_name, base_path=None, append_to_single_file
 
 def backfill_precip(hobolink_data,filename):
     # Parse data for PrecipMet Tipping Bucket
-    df = pd.DataFrame.from_dict(hobolink_data["observation_list"])
+    df = pd.DataFrame.from_dict(hobolink_data["data"])
     # Parse data for PrecipMet Tipping Bucket
     precipitation_pulses = df.loc[df['sensor_measurement_type'] == 'Precipitation']
     if precipitation_pulses.empty:
